@@ -1,41 +1,80 @@
 # browser-use-native-windows
 
-Standalone Windows-only MCP server for controlling a real browser through native screenshots, Windows accessibility, and `node-interception` mouse/keyboard input.
+Windows-only MCP server for controlling a real Chromium browser with native screenshots, Windows accessibility, and `node-interception` mouse/keyboard input.
 
-## Scope
+It does not use CDP, Chrome DevTools, Playwright, Puppeteer, browser extensions, DOM selectors, DOM snapshots, or page JavaScript evaluation.
 
-- Windows only.
-- Native input only.
-- No CDP, Chrome DevTools, Playwright, Puppeteer, browser extensions, DOM selectors, DOM snapshots, or JavaScript evaluation.
-- No dependency on any internal package from this repository.
+## Requirements
 
-## Driver
+- Windows
+- Node.js 20+
+- Chromium-based browser: Edge, Chrome, Brave, Chromium, Vivaldi, Opera, Yandex
+- `node-interception` driver
 
-Install the `node-interception` driver as administrator, reboot Windows, then start the MCP server.
+Install the native input package and driver from an administrator terminal:
 
 ```powershell
-npx node-interception /install
+npm install -g node-interception
+node-interception /install
 ```
 
-## Stdio
+Reboot Windows after driver installation.
 
-Generic client config:
+## Install
 
-```json
-{
-  "mcpServers": {
-    "browser-use-native-windows": {
-      "command": "node",
-      "args": [
-        "<repo-root>\\packages\\browser-use-native-windows\\dist\\index.js"
-      ],
-      "cwd": "<repo-root>\\packages\\browser-use-native-windows"
-    }
-  }
-}
+From source:
+
+```powershell
+npm install
+npm run build
 ```
 
-Project MCP settings shape:
+Optional global install from this package root:
+
+```powershell
+npm install -g .
+```
+
+## Configuration
+
+The MCP reads system environment variables first. If a `.env` file exists next to this README, it is loaded as a fallback. The MCP starts normally when `.env` is missing.
+
+Create `.env` from `.env.example` when you want fixed SSE or browser settings:
+
+```env
+BROWSER_USE_NATIVE_WINDOWS_SSE_HOST= "0.0.0.0"
+BROWSER_USE_NATIVE_WINDOWS_SSE_PORT= "7331"
+BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH= "change.me"
+BROWSER_USE_NATIVE_WINDOWS_BROWSER_EXECUTABLE_PATH= "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+BROWSER_USE_NATIVE_WINDOWS_BROWSER_USER_DATA_DIR= "C:\Users\YOUR_USER\AppData\Local\Microsoft\Edge\User Data"
+```
+
+Change `BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH` before exposing SSE outside your machine.
+
+## Run
+
+Stdio transport:
+
+```powershell
+npm run start:stdio
+```
+
+SSE transport:
+
+```powershell
+npm run start:sse
+```
+
+Global install:
+
+```powershell
+browser-use-native-windows
+browser-use-native-windows --transport sse
+```
+
+## MCP Client
+
+Stdio:
 
 ```json
 {
@@ -43,27 +82,14 @@ Project MCP settings shape:
     "browser-use-native-windows": {
       "transport": "stdio",
       "command": "node",
-      "args": [
-        "<repo-root>\\packages\\browser-use-native-windows\\dist\\index.js"
-      ],
-      "cwd": "<repo-root>\\packages\\browser-use-native-windows"
+      "args": ["<package-root>\\dist\\index.js"],
+      "cwd": "<package-root>"
     }
   }
 }
 ```
 
-## SSE
-
-Start the server:
-
-```powershell
-$env:BROWSER_USE_NATIVE_WINDOWS_SSE_HOST = "0.0.0.0"
-$env:BROWSER_USE_NATIVE_WINDOWS_SSE_PORT = "7331"
-$env:BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH = "change.me"
-node <package-root>\dist\index.js --transport sse
-```
-
-Connect a client:
+SSE:
 
 ```json
 {
@@ -79,16 +105,14 @@ Connect a client:
 }
 ```
 
-Change `BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH` before exposing the server beyond local testing.
-
 ## Tools
 
-- `browser_observe`: adopt or launch the browser, optionally handle a target URL through native address-bar input, and return a browser-window or browser-owned file-dialog observation.
-- `browser_act`: execute one native action against a matching fresh observation token.
-- `browser_status`: return transport, driver, browser process, HWND, focus, monitor, DPI, and observation state.
-- `browser_stop`: release held input state and optionally close the tracked browser when requested.
+- `browser_observe`: launch or adopt the browser and return a native observation.
+- `browser_act`: run one mouse or keyboard action against a fresh observation token.
+- `browser_status`: return transport, driver, browser, window, focus, monitor, DPI, and observation state.
+- `browser_stop`: release held input state and optionally close the tracked browser.
 
-## Force Stop Hotkey
+## Force Stop
 
 Default global hotkey:
 
@@ -96,21 +120,4 @@ Default global hotkey:
 Control+F12
 ```
 
-The hotkey is registered by a watchdog process. When pressed, it releases virtual keys and mouse buttons, then force-kills the MCP process. Use it when native input gets stuck and the agent cannot call `browser_stop`.
-
-## Rare Host Overrides
-
-Normal stdio usage needs no env object.
-
-| Key | Default | Purpose |
-| --- | --- | --- |
-| `BROWSER_USE_NATIVE_WINDOWS_SSE_HOST` | `127.0.0.1` | SSE bind host. |
-| `BROWSER_USE_NATIVE_WINDOWS_SSE_PORT` | `7331` | SSE bind port. |
-| `BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH` | `change.me` | SSE bearer token. |
-| `BROWSER_USE_NATIVE_WINDOWS_BROWSER_EXECUTABLE_PATH` | empty | Override browser executable auto-detection. |
-| `BROWSER_USE_NATIVE_WINDOWS_BROWSER_USER_DATA_DIR` | empty | Override package-local browser profile directory. |
-| `BROWSER_USE_NATIVE_WINDOWS_BROWSER_EXTRA_ARGS` | empty | Extra launch args separated by spaces. |
-| `BROWSER_USE_NATIVE_WINDOWS_NO_SANDBOX` | `false` | Add browser no-sandbox launch args. |
-| `BROWSER_USE_NATIVE_WINDOWS_BLOCKED_URL_RULES` | empty | Semicolon-separated wildcard URL/path block rules. |
-| `BROWSER_USE_NATIVE_WINDOWS_FORCE_STOP_HOTKEY` | `Control+F12` | Override the global force-stop hotkey. |
-| `BROWSER_USE_NATIVE_WINDOWS_DISABLE_FORCE_STOP_HOTKEY` | `false` | Disable the force-stop watchdog when true. |
+The watchdog releases held keys and mouse buttons, then stops the MCP process.
