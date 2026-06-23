@@ -33,6 +33,7 @@
   "files": [
     "dist",
     "README.md",
-    "AGENTS.md"
+    "AGENTS.md",
+    ".env.example"
   ]
 }

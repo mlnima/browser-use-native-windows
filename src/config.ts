@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   defaultSseAuth,
   defaultSseHost,
@@ -20,10 +22,38 @@ export type ServerConfig = {
   disableForceStopHotkey: boolean;
 };
 
+const envPrefix = 'BROWSER_USE_NATIVE_WINDOWS_';
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const envFilePath = path.join(moduleDir, '..', '.env');
+
+const envValue = (value: string) => {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  return (quote === '"' || quote === "'") && trimmed.endsWith(quote)
+    ? trimmed.slice(1, -1)
+    : trimmed;
+};
+
+const loadEnvFile = () => {
+  if (!fs.existsSync(envFilePath)) return {};
+  const entries: Record<string, string> = {};
+  for (const line of fs.readFileSync(envFilePath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const separator = trimmed.indexOf('=');
+    const key = separator > 0 ? trimmed.slice(0, separator).trim() : '';
+    if (!key.startsWith(envPrefix)) continue;
+    entries[key] = envValue(trimmed.slice(separator + 1));
+  }
+  return entries;
+};
+
+const envFile = loadEnvFile();
+
 const envString = (key: string) =>
   typeof process.env[key] === 'string' && process.env[key]!.trim().length > 0
     ? process.env[key]!.trim()
-    : '';
+    : envFile[key]?.trim() || '';
 
 const envBoolean = (key: string) => {
   const value = envString(key).toLowerCase();
