@@ -39,7 +39,7 @@ npm install -g .
 
 The MCP reads system environment variables first. If a `.env` file exists next to this README, it is loaded as a fallback. The MCP starts normally when `.env` is missing.
 
-Create `.env` from `.env.example` when you want fixed SSE or browser settings:
+Create `.env` from `.env.example` when you want fixed HTTP or browser settings:
 
 ```env
 BROWSER_USE_NATIVE_WINDOWS_SSE_HOST= "0.0.0.0"
@@ -49,7 +49,7 @@ BROWSER_USE_NATIVE_WINDOWS_BROWSER_EXECUTABLE_PATH= "C:\Program Files (x86)\Micr
 BROWSER_USE_NATIVE_WINDOWS_BROWSER_USER_DATA_DIR= "C:\Users\YOUR_USER\AppData\Local\Microsoft\Edge\User Data"
 ```
 
-Change `BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH` before exposing SSE outside your machine.
+Change `BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH` before exposing HTTP outside your machine.
 
 ## Run
 
@@ -59,7 +59,7 @@ Stdio transport:
 npm run start:stdio
 ```
 
-SSE transport:
+HTTP transports:
 
 ```powershell
 npm run start:sse
@@ -89,7 +89,15 @@ Stdio:
 }
 ```
 
-SSE:
+Codex Streamable HTTP:
+
+```toml
+[mcp_servers.browser_use_native_windows]
+url = "http://<host>:7331/mcp"
+http_headers = { "Authorization" = "Bearer change.me" }
+```
+
+SSE compatibility:
 
 ```json
 {

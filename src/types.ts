@@ -13,7 +13,7 @@ export type Point = {
 };
 
 export type BrowserKind = 'brave' | 'canary' | 'chromium' | 'chrome' | 'custom' | 'edge';
-export type TransportMode = 'stdio' | 'sse';
+export type TransportMode = 'stdio' | 'sse' | 'mcp';
 export type ObservedTargetType = 'browser-window' | 'file-dialog';
 export type TargetUrlStatus = 'not-provided' | 'matched' | 'navigated' | 'unknown';
 

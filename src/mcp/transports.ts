@@ -1,6 +1,9 @@
 import express from 'express';
+import { randomUUID } from 'node:crypto';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { ServerConfig } from '../config';
 import { createRuntimeState } from '../state';
 import { createMcpServer } from './createServer';
@@ -15,22 +18,72 @@ export const startStdio = async (config: ServerConfig) => {
 const authorized = (header: unknown, token: string) =>
   typeof header === 'string' && header === `Bearer ${token}`;
 
+const sessionHeader = (header: string | string[] | undefined) =>
+  typeof header === 'string' ? header : header?.[0] || '';
+
+const sendMcpError = (res: express.Response, status: number, code: number, message: string) =>
+  res.status(status).json({
+    jsonrpc: '2.0',
+    error: { code, message },
+    id: null,
+  });
+
+const createStreamableTransport = async (
+  config: ServerConfig,
+  transports: Record<string, StreamableHTTPServerTransport>,
+) => {
+  let transport: StreamableHTTPServerTransport;
+  transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (sessionId) => {
+      transports[sessionId] = transport;
+    },
+  });
+  transport.onclose = () => {
+    const sessionId = transport.sessionId;
+    if (sessionId) delete transports[sessionId];
+  };
+  const state = createRuntimeState('mcp');
+  const server = createMcpServer(state, config);
+  await server.connect(transport);
+  return transport;
+};
+
 export const startSse = async (config: ServerConfig) => {
   const app = express();
-  const transports: Record<string, SSEServerTransport> = {};
+  const sseTransports: Record<string, SSEServerTransport> = {};
+  const streamableTransports: Record<string, StreamableHTTPServerTransport> = {};
   app.use(express.json({ limit: '4mb' }));
-  app.use(['/sse', '/messages'], (req, res, next) => {
+  app.use(['/mcp', '/sse', '/messages'], (req, res, next) => {
     if (authorized(req.header('authorization'), config.sseAuth)) return next();
     res.status(401).send('Unauthorized');
+  });
+  app.all('/mcp', async (req, res) => {
+    try {
+      const sessionId = sessionHeader(req.headers['mcp-session-id']);
+      const transport = sessionId
+        ? streamableTransports[sessionId]
+        : req.method === 'POST' && isInitializeRequest(req.body)
+          ? await createStreamableTransport(config, streamableTransports)
+          : null;
+      if (!transport) {
+        sendMcpError(res, sessionId ? 404 : 400, -32000, 'No valid MCP session');
+        return;
+      }
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      logError(error);
+      if (!res.headersSent) sendMcpError(res, 500, -32603, 'MCP request handling failed');
+    }
   });
   app.get('/sse', async (_req, res) => {
     try {
       const state = createRuntimeState('sse');
       const server = createMcpServer(state, config);
       const transport = new SSEServerTransport('/messages', res);
-      transports[transport.sessionId] = transport;
+      sseTransports[transport.sessionId] = transport;
       transport.onclose = () => {
-        delete transports[transport.sessionId];
+        delete sseTransports[transport.sessionId];
       };
       await server.connect(transport);
     } catch (error) {
@@ -40,7 +93,7 @@ export const startSse = async (config: ServerConfig) => {
   });
   app.post('/messages', async (req, res) => {
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : '';
-    const transport = transports[sessionId];
+    const transport = sseTransports[sessionId];
     if (!transport) {
       res.status(404).send('Session not found');
       return;
