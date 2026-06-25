@@ -1,0 +1,9 @@
+[browser-use-native-windows] Native cursor failed to reach target 5152,1380; current position is 5152,1381.
+[browser-use-native-windows] Native cursor missed target 5152,1380; current position is 5152,1381.
+npm error Lifecycle script `start` failed with error:
+npm error code 4294967295
+npm error path E:\dev\eskai.net\packages\browser-use-native-windows
+npm error workspace browser-use-native-windows@0.1.0
+npm error location E:\dev\eskai.net\packages\browser-use-native-windows
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c node ./dist/index.js --transport sse
