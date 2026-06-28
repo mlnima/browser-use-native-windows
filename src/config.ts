@@ -7,12 +7,17 @@ import {
   defaultSsePort,
   defaultUserDataDir,
   defaultForceStopHotkey,
+  logDir,
+  runtimeDir,
+  screenshotDir,
 } from './defaults';
 
 export type ServerConfig = {
   sseHost: string;
   ssePort: number;
   sseAuth: string;
+  logDir: string;
+  screenshotsDir: string;
   browserExecutablePath: string;
   browserUserDataDir: string;
   browserExtraArgs: string[];
@@ -22,8 +27,7 @@ export type ServerConfig = {
   disableForceStopHotkey: boolean;
 };
 
-const envPrefix = 'BROWSER_USE_NATIVE_WINDOWS_';
-
+const envPrefixes = ['BROWSER_USE_NATIVE_WINDOWS_', 'COMPUTER_USE_WINDOWS_'];
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const envFilePath = path.join(moduleDir, '..', '.env');
 
@@ -42,7 +46,7 @@ const loadEnvFile = () => {
     const trimmed = line.trim();
     const separator = trimmed.indexOf('=');
     const key = separator > 0 ? trimmed.slice(0, separator).trim() : '';
-    if (!key.startsWith(envPrefix)) continue;
+    if (!envPrefixes.some((prefix) => key.startsWith(prefix))) continue;
     entries[key] = envValue(trimmed.slice(separator + 1));
   }
   return entries;
@@ -70,10 +74,17 @@ const splitArgs = (value: string) =>
     entry.replace(/^["']|["']$/g, ''),
   ) || [];
 
+const envPath = (key: string, fallback: string) => {
+  const value = envString(key) || fallback;
+  return path.resolve(path.isAbsolute(value) ? value : path.join(runtimeDir(), value));
+};
+
 export const loadConfig = (): ServerConfig => ({
   sseHost: envString('BROWSER_USE_NATIVE_WINDOWS_SSE_HOST') || defaultSseHost,
   ssePort: envPort('BROWSER_USE_NATIVE_WINDOWS_SSE_PORT'),
   sseAuth: envString('BROWSER_USE_NATIVE_WINDOWS_SSE_AUTH') || defaultSseAuth,
+  logDir: envPath('COMPUTER_USE_WINDOWS_LOG_DIR', logDir()),
+  screenshotsDir: envPath('COMPUTER_USE_WINDOWS_SCREENSHOTS_DIR', screenshotDir()),
   browserExecutablePath: envString('BROWSER_USE_NATIVE_WINDOWS_BROWSER_EXECUTABLE_PATH'),
   browserUserDataDir: path.resolve(
     envString('BROWSER_USE_NATIVE_WINDOWS_BROWSER_USER_DATA_DIR') || defaultUserDataDir(),

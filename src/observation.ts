@@ -39,7 +39,12 @@ export const createObservation = async (params: {
   const refreshedBrowser = await refreshWindow(ensured.window, ensured.browser.exe.path) || ensured.window;
   if (beforeNavigation.targetType === 'browser-window') await bringWindowToTop(refreshedBrowser.handle);
   const { target, targetType } = await selectObservedTarget(refreshedBrowser);
-  const screenshot = await captureObservedScreenshot({ browser: refreshedBrowser, target, targetType });
+  const screenshot = await captureObservedScreenshot({
+    browser: refreshedBrowser,
+    target,
+    targetType,
+    screenshotsDir: params.config.screenshotsDir,
+  });
   const accessibilityNodes = await listAccessibilityNodes(target, {
     width: screenshot.metadata.width,
     height: screenshot.metadata.height,

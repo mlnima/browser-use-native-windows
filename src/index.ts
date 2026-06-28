@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig } from './config';
 import { startSse, startStdio } from './mcp/transports';
-import { logError } from './log';
+import { configureLogDir, logError } from './log';
 import { startForceStopHotkey } from './native/forceStopHotkey';
 
 const transportArg = process.argv.includes('--transport') || process.argv.includes('-t')
@@ -10,6 +10,7 @@ const transportArg = process.argv.includes('--transport') || process.argv.includ
 
 const main = async () => {
   const config = loadConfig();
+  configureLogDir(config.logDir);
   const forceStopHotkey = startForceStopHotkey(config);
   const stopForceStopHotkey = () => forceStopHotkey?.stop();
   process.once('exit', stopForceStopHotkey);

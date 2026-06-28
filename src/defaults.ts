@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 
 export const packageName = 'browser-use-native-windows';
@@ -23,10 +24,13 @@ export const doubleClickDelayMs = 75;
 export const actionAfterNavigationWaitMs = 1200;
 
 export const runtimeDir = () =>
-  path.join(process.cwd(), '.browser-use-native-windows');
+  path.join(os.homedir(), '.browser-use-native-windows');
 
 export const screenshotDir = () =>
   path.join(runtimeDir(), 'screenshots');
+
+export const logDir = () =>
+  path.join(runtimeDir(), 'logs');
 
 export const defaultUserDataDir = () =>
   path.join(runtimeDir(), 'user-data');

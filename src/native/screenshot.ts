@@ -1,17 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { screenshotDir, screenshotMaxBytes, screenshotMaxSide } from '../defaults';
+import { screenshotMaxBytes, screenshotMaxSide } from '../defaults';
 import type { Bounds, MonitorInfo, ObservedTargetType, ScreenshotMetadata, WindowInfo } from '../types';
 import { boundsHeight, boundsWidth, contentBounds, intersectBounds, intersectBoundsArea, unionBounds } from './geometry';
 import { captureWindowImage, listDisplays } from './windowsWindow';
 
-type NormalizedImage = {
-  buffer: Buffer;
-  contentType: 'image/png' | 'image/jpeg';
-  width: number;
-  height: number;
-};
+type NormalizedImage = { buffer: Buffer; contentType: 'image/png' | 'image/jpeg'; width: number; height: number };
 
 const qualitySteps = [90, 82, 74, 66, 58, 50, 42, 34];
 
@@ -61,25 +56,21 @@ const visibleBounds = (target: Bounds, displays: MonitorInfo[]) => {
   return intersections.length > 0 ? unionBounds(intersections) : target;
 };
 
-const saveScreenshot = async (buffer: Buffer, contentType: string) => {
-  fs.mkdirSync(screenshotDir(), { recursive: true });
+const saveScreenshot = async (buffer: Buffer, contentType: string, screenshotsDir: string) => {
+  fs.mkdirSync(screenshotsDir, { recursive: true });
   const extension = contentType === 'image/jpeg' ? 'jpg' : 'png';
-  const file = path.join(screenshotDir(), `browser-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`);
+  const file = path.join(screenshotsDir, `browser-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`);
   fs.writeFileSync(file, buffer);
   return file;
 };
 
-export const captureObservedScreenshot = async (params: {
-  browser: WindowInfo;
-  target: WindowInfo;
-  targetType: ObservedTargetType;
-}) => {
+export const captureObservedScreenshot = async (params: { browser: WindowInfo; target: WindowInfo; targetType: ObservedTargetType; screenshotsDir: string }) => {
   const displays = await listDisplays();
   const targetBounds = visibleBounds(params.target.bounds, displays);
   const browserBounds = visibleBounds(params.browser.bounds, displays);
   const raw = Buffer.from(await captureWindowImage(targetBounds), 'base64');
   const normalized = await normalizeImage(raw);
-  const screenshotPath = await saveScreenshot(normalized.buffer, normalized.contentType);
+  const screenshotPath = await saveScreenshot(normalized.buffer, normalized.contentType, params.screenshotsDir);
   const monitors = monitorRows(displays, targetBounds);
   const monitor = selectedMonitor(monitors);
   const metadata: ScreenshotMetadata = {
