@@ -1,7 +1,7 @@
 import type { ServerConfig } from '../config';
 import type { RuntimeState } from '../state';
 import { getNativeInputController } from '../native/input/controller';
-import { getForegroundWindow } from '../native/windowsWindow';
+import { findWindowsBrowserWindow, getForegroundWindowHandle, listDisplays } from '../native/windowsWindow';
 
 const processState = (state: RuntimeState) => {
   const proc = state.browser?.proc;
@@ -11,9 +11,21 @@ const processState = (state: RuntimeState) => {
 };
 
 export const browserStatus = async (state: RuntimeState, config: ServerConfig) => {
-  const foreground = await getForegroundWindow();
+  const browserWindow = state.browser
+    ? await findWindowsBrowserWindow({
+        handle: state.browser.windowHandle,
+        pid: state.browser.windowProcessId,
+        executablePath: state.browser.exe.path,
+      })
+    : null;
+  const displays = browserWindow ? await listDisplays() : [];
+  const monitorIndex = browserWindow?.monitor
+    ? displays.findIndex((display) => display.id === browserWindow.monitor?.id)
+    : -1;
+  const isBrowserForeground = !!browserWindow && await getForegroundWindowHandle() === browserWindow.handle;
   const last = state.lastObservation;
   const driver = getNativeInputController().driverStatus();
+  state.browserWindow = browserWindow ? { handle: browserWindow.handle } : null;
   return {
     transport: state.transportMode,
     nativeInputDriver: driver,
@@ -26,17 +38,14 @@ export const browserStatus = async (state: RuntimeState, config: ServerConfig) =
     userDataDir: state.browser?.userDataDir || config.browserUserDataDir,
     browserLaunchArgs: state.browser?.args || [],
     browserProcessState: processState(state),
-    browserWindow: state.browserWindow,
-    foregroundWindow: foreground,
+    browserWindow,
     focus: {
-      isBrowserForeground: !!foreground && !!state.browserWindow && foreground.handle === state.browserWindow.handle,
-      foregroundHandle: foreground?.handle || null,
+      isBrowserForeground,
     },
     observedTargetType: last?.observedTargetType || null,
-    observedTargetWindow: last?.target || null,
-    monitorIndex: last?.screenshot.monitorIndex ?? null,
-    monitor: last?.screenshot.monitor ?? null,
-    dpi: last?.screenshot.dpi ?? null,
+    monitorIndex: monitorIndex >= 0 ? monitorIndex : null,
+    monitor: browserWindow?.monitor || null,
+    dpi: browserWindow?.monitor?.dpi || browserWindow?.dpi || null,
     lastObservation: last
       ? {
           token: last.observationToken,

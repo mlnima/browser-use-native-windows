@@ -3,8 +3,9 @@ import type { TargetUrlStatus, WindowInfo } from '../types';
 import { actionAfterNavigationWaitMs } from '../defaults';
 import { sleep } from '../util/time';
 import { getNativeInputController } from './input/controller';
-import { bringWindowToTop } from './windowsWindow';
-import { readCurrentBrowserUrl, urlsMatch } from './urlReader';
+import { bringWindowToTop, getForegroundWindowHandle, listDisplays, pointBelongsToWindow } from './windowsWindow';
+import { unionBounds } from './geometry';
+import { readBrowserAddressPoint, readCurrentBrowserUrl, urlReached } from './urlReader';
 
 export type TargetUrlResult = {
   currentUrl: string | null;
@@ -26,12 +27,30 @@ const assertAllowedUrl = (url: string, rules: string[]) => {
 };
 
 const navigateWithNativeInput = async (window: WindowInfo, url: string) => {
-  await bringWindowToTop(window.handle);
+  if (!await bringWindowToTop(window.handle)) throw new Error('Browser window could not be made foreground; navigation aborted.');
   const controller = getNativeInputController();
-  await controller.pressKeyCombo(['Control', 'l']);
+  const point = await readBrowserAddressPoint(window);
+  const displays = await listDisplays();
+  if (!point || displays.length === 0 || !await pointBelongsToWindow(window.handle, point)) {
+    throw new Error('Owned browser address bar could not be targeted.');
+  }
+  await controller.moveMouseTo(point.x, point.y, unionBounds(displays.map((display) => display.bounds)));
+  const cursor = await controller.getCursorPosition();
+  if (!cursor || cursor.x !== point.x || cursor.y !== point.y || await getForegroundWindowHandle() !== window.handle ||
+    !await pointBelongsToWindow(window.handle, point)) {
+    throw new Error('Owned browser address bar targeting changed; navigation aborted.');
+  }
+  await controller.clickMouse('left');
+  await controller.pressKeyCombo(['Control', 'a']);
   await controller.typeText(url);
   await controller.pressKey('Enter');
   await sleep(actionAfterNavigationWaitMs);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const currentUrl = await readCurrentBrowserUrl(window);
+    if (currentUrl && urlReached(currentUrl, url)) return currentUrl;
+    await sleep(300);
+  }
+  throw new Error('Native browser navigation did not reach the requested URL.');
 };
 
 export const handleTargetUrl = async (params: {
@@ -44,8 +63,7 @@ export const handleTargetUrl = async (params: {
   if (!targetUrl) return { currentUrl: await readCurrentBrowserUrl(params.window), targetUrlStatus: 'not-provided' };
   assertAllowedUrl(targetUrl, params.config.blockedUrlRules);
   const currentUrl = params.launchedNow ? null : await readCurrentBrowserUrl(params.window);
-  if (currentUrl && urlsMatch(currentUrl, targetUrl)) return { currentUrl, targetUrlStatus: 'matched' };
-  if (!params.launchedNow && !currentUrl) return { currentUrl: null, targetUrlStatus: 'unknown' };
-  await navigateWithNativeInput(params.window, targetUrl);
-  return { currentUrl: targetUrl, targetUrlStatus: 'navigated' };
+  if (currentUrl && urlReached(currentUrl, targetUrl)) return { currentUrl, targetUrlStatus: 'matched' };
+  const navigatedUrl = await navigateWithNativeInput(params.window, targetUrl);
+  return { currentUrl: navigatedUrl, targetUrlStatus: 'navigated' };
 };

@@ -112,7 +112,7 @@ export const listBrowserExecutables = async (config: ServerConfig): Promise<Brow
     if (!exists(config.browserExecutablePath)) {
       throw new Error(`Browser executable not found: ${config.browserExecutablePath}`);
     }
-    return [{ kind: 'custom', path: config.browserExecutablePath }];
+    return [{ kind: inferKind(config.browserExecutablePath), path: config.browserExecutablePath }];
   }
   const detected = await detectDefaultBrowser();
   const fallbacks = fallbackCandidates()

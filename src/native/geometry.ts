@@ -35,6 +35,13 @@ export const localToGlobalPoint = (bounds: Bounds, point: Point, size: { width: 
   y: Math.round(bounds.top + point.y * (boundsHeight(bounds) / Math.max(1, size.height))),
 });
 
+export const resizeLocalBounds = (bounds: Bounds, from: { width: number; height: number }, to: { width: number; height: number }): Bounds => ({
+  left: Math.round(bounds.left * to.width / Math.max(1, from.width)),
+  top: Math.round(bounds.top * to.height / Math.max(1, from.height)),
+  right: Math.round(bounds.right * to.width / Math.max(1, from.width)),
+  bottom: Math.round(bounds.bottom * to.height / Math.max(1, from.height)),
+});
+
 export const pointInsideBounds = (point: Point, bounds: Bounds) =>
   point.x >= bounds.left &&
   point.y >= bounds.top &&

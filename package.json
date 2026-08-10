@@ -1,7 +1,6 @@
 {
   "name": "browser-use-native-windows",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,11 +11,15 @@
     "build": "tsup src/index.ts --format esm --target node20 --dts --clean",
     "typecheck": "tsc --noEmit",
     "prestart": "npm run build",
-    "start": "node ./dist/index.js --transport sse",
+    "start": "node ./dist/index.js --transport all",
     "prestart:stdio": "npm run build",
     "start:stdio": "node ./dist/index.js",
+    "prestart:mcp": "npm run build",
+    "start:mcp": "node ./dist/index.js --transport mcp",
     "prestart:sse": "npm run build",
     "start:sse": "node ./dist/index.js --transport sse",
+    "prestart:all": "npm run build",
+    "start:all": "node ./dist/index.js --transport all",
     "prepack": "npm run build"
   },
   "dependencies": {

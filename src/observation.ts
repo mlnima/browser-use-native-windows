@@ -1,24 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ServerConfig } from './config';
-import type { Observation, ObservedTargetType, WindowInfo } from './types';
+import type { Observation } from './types';
 import type { RuntimeState } from './state';
 import { ensureBrowser } from './native/browserRuntime';
-import { listAccessibilityNodes } from './native/accessibility';
-import { captureObservedScreenshot } from './native/screenshot';
+import { captureCurrentTarget } from './native/currentTarget';
 import { handleTargetUrl } from './native/targetUrl';
-import { bringWindowToTop, foregroundBrowserOwnedFileDialog, refreshWindow } from './native/windowsWindow';
-
-const visibleWindow = (window: WindowInfo) => ({
-  ...window,
-  clientBounds: window.clientBounds || window.bounds,
-});
-
-const selectObservedTarget = async (browserWindow: WindowInfo) => {
-  const dialog = await foregroundBrowserOwnedFileDialog(browserWindow);
-  return dialog
-    ? { target: visibleWindow(dialog), targetType: 'file-dialog' as const }
-    : { target: visibleWindow(browserWindow), targetType: 'browser-window' as const };
-};
+import { bringWindowToTop, foregroundBrowserOwnedFileDialog } from './native/windowsWindow';
 
 export const createObservation = async (params: {
   state: RuntimeState;
@@ -27,46 +14,34 @@ export const createObservation = async (params: {
   inlineImage?: boolean;
 }): Promise<Observation> => {
   const ensured = await ensureBrowser(params.state, params.config);
-  const beforeNavigation = await selectObservedTarget(ensured.window);
-  const url = beforeNavigation.targetType === 'browser-window'
-    ? await handleTargetUrl({
+  const dialog = await foregroundBrowserOwnedFileDialog(ensured.window);
+  const url = dialog
+    ? { currentUrl: null, targetUrlStatus: params.targetUrl ? 'unknown' as const : 'not-provided' as const }
+    : await handleTargetUrl({
         config: params.config,
         window: ensured.window,
         targetUrl: params.targetUrl,
         launchedNow: ensured.launchedNow,
-      })
-    : { currentUrl: null, targetUrlStatus: params.targetUrl ? 'unknown' as const : 'not-provided' as const };
-  const refreshedBrowser = await refreshWindow(ensured.window, ensured.browser.exe.path) || ensured.window;
-  if (beforeNavigation.targetType === 'browser-window') await bringWindowToTop(refreshedBrowser.handle);
-  const { target, targetType } = await selectObservedTarget(refreshedBrowser);
-  const screenshot = await captureObservedScreenshot({
-    browser: refreshedBrowser,
-    target,
-    targetType,
-    screenshotsDir: params.config.screenshotsDir,
-  });
-  const accessibilityNodes = await listAccessibilityNodes(target, {
-    width: screenshot.metadata.width,
-    height: screenshot.metadata.height,
-  });
-  const capturedAt = new Date().toISOString();
+      });
+  if (!dialog && !await bringWindowToTop(ensured.window.handle)) throw new Error('Browser window could not be made foreground; screenshot capture aborted.');
+  const current = await captureCurrentTarget(ensured.window, params.config.screenshotsDir);
   const observation: Observation = {
     sessionId: params.state.sessionId,
     observationToken: randomUUID(),
-    observedTargetType: targetType as ObservedTargetType,
+    observedTargetType: current.targetType,
     currentUrl: url.currentUrl,
     targetUrlStatus: url.targetUrlStatus,
-    screenshot: screenshot.metadata,
-    screenshotPath: screenshot.screenshotPath,
-    imageBase64: params.inlineImage === true ? screenshot.imageBase64 : undefined,
-    accessibilityNodes,
-    browser: refreshedBrowser,
-    target,
-    capturedAt,
+    screenshot: current.screenshot.metadata,
+    screenshotPath: current.screenshot.screenshotPath,
+    imageBase64: params.inlineImage === false ? undefined : current.screenshot.imageBase64,
+    accessibilityNodes: current.accessibilityNodes,
+    browser: current.browser,
+    target: current.target,
+    capturedAt: current.screenshot.metadata.capturedAt,
     consumed: false,
     stale: false,
   };
-  params.state.lastObservation = observation;
-  params.state.browserWindow = refreshedBrowser;
+  params.state.lastObservation = { ...observation, imageBase64: undefined };
+  params.state.browserWindow = { handle: current.browser.handle };
   return observation;
 };

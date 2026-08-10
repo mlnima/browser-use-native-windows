@@ -1,8 +1,9 @@
-import type { NativeInputMouseButton, Point } from '../../types';
+import type { Bounds, NativeInputMouseButton, Point } from '../../types';
 
 export type NativeInputAdapter = {
   platform: 'windows';
   moveMouseRelative: (dx: number, dy: number) => Promise<void>;
+  moveMouseAbsolute: (x: number, y: number, desktopBounds: Bounds) => Promise<void>;
   mouseDown: (button: NativeInputMouseButton) => Promise<void>;
   mouseUp: (button: NativeInputMouseButton) => Promise<void>;
   scroll: (delta: number) => Promise<void>;
@@ -16,9 +17,9 @@ export type NativeInputAdapter = {
 
 export type NativeInputController = NativeInputAdapter & {
   scrollMouse: (delta: number) => Promise<void>;
-  moveMouseTo: (x: number, y: number) => Promise<{ steps: number; movedDx: number; movedDy: number }>;
+  moveMouseTo: (x: number, y: number, desktopBounds: Bounds) => Promise<{ steps: number; movedDx: number; movedDy: number }>;
   clickMouse: (button: NativeInputMouseButton) => Promise<void>;
-  dragMouseTo: (x: number, y: number, button: NativeInputMouseButton) => Promise<{ steps: number; movedDx: number; movedDy: number }>;
+  dragMouseTo: (x: number, y: number, desktopBounds: Bounds, button: NativeInputMouseButton) => Promise<{ steps: number; movedDx: number; movedDy: number }>;
   releaseAll: () => Promise<void>;
   driverStatus: () => { available: boolean; error: string | null };
 };

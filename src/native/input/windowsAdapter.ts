@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import type { NativeInputMouseButton, Point } from '../../types';
-import { runPowerShellJson } from '../processExec';
-import { apiPrelude } from '../windowsApi';
+import type { Bounds, NativeInputMouseButton, Point } from '../../types';
+import { runPowerShell, runPowerShellJson } from '../processExec';
+import { apiPrelude, escapePs } from '../windowsApi';
 import { windowsNativeKeyCodes, type NativeWindowsKeyEntry } from './keyMap';
 import type { NativeInputAdapter } from './types';
 import { sleep } from '../../util/time';
@@ -12,7 +12,6 @@ type InterceptionDevice = {
 
 type InterceptionSession = {
   getMice: () => InterceptionDevice[];
-  getKeyboards: () => InterceptionDevice[];
   isDestroyed: () => boolean;
 };
 
@@ -32,7 +31,6 @@ const mouseFlags: Record<NativeInputMouseButton, { down: number; up: number }> =
 
 let interceptionSession: InterceptionSession | null = null;
 let interceptionModule: InterceptionModule | null = null;
-let keyboardDevice: InterceptionDevice | null = null;
 let mouseDevice: InterceptionDevice | null = null;
 let lastDriverError: string | null = null;
 
@@ -47,7 +45,6 @@ const getInterception = () => {
     interceptionModule ??= require('node-interception') as InterceptionModule;
     if (!interceptionSession || interceptionSession.isDestroyed()) {
       interceptionSession = new interceptionModule.Interception();
-      keyboardDevice = null;
       mouseDevice = null;
     }
     lastDriverError = null;
@@ -66,14 +63,6 @@ const getMouseDevice = () => {
   return device;
 };
 
-const getKeyboardDevice = () => {
-  const { session } = getInterception();
-  const device = keyboardDevice || session.getKeyboards()[0] || null;
-  if (!device) throw new Error(unavailableMessage('keyboard'));
-  keyboardDevice = device;
-  return device;
-};
-
 const sendMouse = (state: number, x = 0, y = 0, rolling = 0, flags?: number) => {
   const { api } = getInterception();
   const ok = getMouseDevice().send({
@@ -88,6 +77,13 @@ const sendMouse = (state: number, x = 0, y = 0, rolling = 0, flags?: number) => 
   if (!ok) throw new Error('node-interception mouse send failed.');
 };
 
+const absoluteAxis = (value: number, minimum: number, maximum: number) => {
+  const size = maximum - minimum;
+  if (size <= 1) throw new Error('Virtual desktop bounds are unavailable.');
+  const clamped = Math.min(Math.max(Math.round(value), minimum), maximum - 1);
+  return Math.round((clamped - minimum) * 65535 / (size - 1));
+};
+
 const keyEntry = (key: string) => {
   const normalized = key === 'Return'
     ? 'Enter'
@@ -99,20 +95,16 @@ const keyEntry = (key: string) => {
   return entry;
 };
 
-const sendKeyCode = (entry: NativeWindowsKeyEntry, down: boolean) => {
-  const { api } = getInterception();
-  const state = down
-    ? entry.special ? api.KeyState.E0 : api.KeyState.DOWN
-    : (entry.special ? api.KeyState.E0 : 0) | api.KeyState.UP;
-  const ok = getKeyboardDevice().send({ type: 'keyboard', code: entry.code, state, information: 0 });
-  if (!ok) throw new Error('node-interception keyboard send failed.');
+const sendKeyCode = async (entry: NativeWindowsKeyEntry, down: boolean) => {
+  await runPowerShell(`${apiPrelude()}
+[NativeBrowserUseApi]::SendScanCode(${entry.code}, $${down ? 'false' : 'true'}, $${entry.special ? 'true' : 'false'})`);
 };
 
-const releaseKeyEntries = (entries: NativeWindowsKeyEntry[]) => {
+const releaseKeyEntries = async (entries: NativeWindowsKeyEntry[]) => {
   const errors: string[] = [];
   for (const entry of entries.slice().reverse()) {
     try {
-      sendKeyCode(entry, false);
+      await sendKeyCode(entry, false);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
@@ -123,11 +115,11 @@ const releaseKeyEntries = (entries: NativeWindowsKeyEntry[]) => {
 const pressEntry = async (entry: NativeWindowsKeyEntry) => {
   const shift = entry.shift ? [windowsNativeKeyCodes.Shift!] : [];
   try {
-    for (const item of shift) sendKeyCode(item, true);
-    sendKeyCode(entry, true);
+    for (const item of shift) await sendKeyCode(item, true);
+    await sendKeyCode(entry, true);
     await sleep(keyHoldMs());
   } finally {
-    releaseKeyEntries([...shift, entry]);
+    await releaseKeyEntries([...shift, entry]);
   }
 };
 
@@ -140,24 +132,35 @@ $point = New-Object POINT
 export const createWindowsInputAdapter = (): NativeInputAdapter => ({
   platform: 'windows',
   moveMouseRelative: async (dx, dy) => sendMouse(0, dx, dy),
+  moveMouseAbsolute: async (x, y, desktopBounds: Bounds) => {
+    const flags = getInterception().api.MouseFlag;
+    sendMouse(
+      0,
+      absoluteAxis(x, desktopBounds.left, desktopBounds.right),
+      absoluteAxis(y, desktopBounds.top, desktopBounds.bottom),
+      0,
+      flags.MOVE_ABSOLUTE | flags.VIRTUAL_DESKTOP,
+    );
+  },
   mouseDown: async (button) => sendMouse(mouseFlags[button].down),
   mouseUp: async (button) => sendMouse(mouseFlags[button].up),
   scroll: async (delta) => sendMouse(getInterception().api.MouseState.WHEEL, 0, 0, Math.round(delta)),
-  keyDown: async (key) => sendKeyCode(keyEntry(key), true),
-  keyUp: async (key) => sendKeyCode(keyEntry(key), false),
+  keyDown: async (key) => { await sendKeyCode(keyEntry(key), true); },
+  keyUp: async (key) => { await sendKeyCode(keyEntry(key), false); },
   pressKey: async (key) => await pressEntry(keyEntry(key)),
   pressKeyCombo: async (keys) => {
     const entries = keys.map(keyEntry);
     const held = entries.slice(0, -1);
     try {
-      for (const entry of held) sendKeyCode(entry, true);
+      for (const entry of held) await sendKeyCode(entry, true);
       await pressEntry(entries[entries.length - 1] || windowsNativeKeyCodes.Space!);
     } finally {
-      releaseKeyEntries(held);
+      await releaseKeyEntries(held);
     }
   },
   typeText: async (text) => {
-    for (const character of text) await pressEntry(keyEntry(character));
+    await runPowerShell(`${apiPrelude()}
+[NativeBrowserUseApi]::SendUnicodeText('${escapePs(text)}')`);
   },
   getCursorPosition: readCursorPosition,
 });
@@ -165,7 +168,6 @@ export const createWindowsInputAdapter = (): NativeInputAdapter => ({
 export const getWindowsInputDriverStatus = () => {
   try {
     getMouseDevice();
-    getKeyboardDevice();
     return { available: true, error: null };
   } catch (error) {
     return { available: false, error: error instanceof Error ? error.message : String(error) || lastDriverError };

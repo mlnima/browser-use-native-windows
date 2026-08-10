@@ -4,6 +4,8 @@ Windows-only MCP server for controlling a real Chromium browser with native scre
 
 It does not use CDP, Chrome DevTools, Playwright, Puppeteer, browser extensions, DOM selectors, DOM snapshots, or page JavaScript evaluation.
 
+Every observation re-detects the browser window, monitor, physical resolution, monitor scaling, and window position. Window and monitor geometry is verified again before native mouse input; resize or scaling changes invalidate the observation so the client must observe the new screenshot before acting.
+
 ## Requirements
 
 - Windows
@@ -59,18 +61,34 @@ Stdio transport:
 npm run start:stdio
 ```
 
-HTTP transports:
+Streamable HTTP at `/mcp`:
+
+```powershell
+npm run start:mcp
+```
+
+Legacy HTTP+SSE at `/sse` with POST messages at `/messages`:
 
 ```powershell
 npm run start:sse
+```
+
+Both network transports:
+
+```powershell
+npm run start:all
 ```
 
 Global install:
 
 ```powershell
 browser-use-native-windows
+browser-use-native-windows --transport mcp
 browser-use-native-windows --transport sse
+browser-use-native-windows --transport all
 ```
+
+The default network host is `0.0.0.0`, so `/mcp` and `/sse` accept connections through localhost and this computer's LAN address. Bearer authentication is required on every network endpoint.
 
 ## MCP Client
 

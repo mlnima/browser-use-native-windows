@@ -1,12 +1,26 @@
 import path from 'node:path';
 import { apiPrelude, boundsObject, escapePs } from './windowsApi';
 
+export const listWindowHandlesScript = (executablePath: string) => `
+${apiPrelude()}
+$targetPath = '${escapePs(path.win32.normalize(executablePath))}'
+$items = New-Object System.Collections.Generic.List[string]
+[NativeBrowserUseApi]::EnumWindows({
+  param($handle, $lParam)
+  if (-not [NativeBrowserUseApi]::IsWindowVisible($handle) -or [NativeBrowserUseApi]::GetAncestor($handle, 2) -ne $handle -or [NativeBrowserUseApi]::GetWindow($handle, 4) -ne [IntPtr]::Zero -or [NativeBrowserUseApi]::IsToolWindow($handle)) { return $true }
+  $windowPid = [uint32]0; [NativeBrowserUseApi]::GetWindowThreadProcessId($handle, [ref]$windowPid) | Out-Null
+  $process = Get-Process -Id $windowPid -ErrorAction SilentlyContinue
+  $processPath = ""; try { $processPath = [string]$process.Path } catch {}
+  if ($processPath.Length -gt 0 -and [System.IO.Path]::GetFullPath($processPath).ToLowerInvariant() -eq [System.IO.Path]::GetFullPath($targetPath).ToLowerInvariant()) { $items.Add($handle.ToInt64().ToString()) | Out-Null }
+  return $true
+}, [IntPtr]::Zero) | Out-Null
+@($items.ToArray()) | ConvertTo-Json -Compress`;
+
 export const listWindowsScript = (params: { handle?: string; pid?: number; executablePath?: string }) => `
 ${apiPrelude()}
 $targetHandle = '${escapePs(params.handle || '')}'
 $targetPid = ${params.pid && params.pid > 0 ? String(params.pid) : '0'}
 $targetPath = '${escapePs(params.executablePath ? path.win32.normalize(params.executablePath) : '')}'
-$targetName = if ($targetPath.Length -gt 0) { [System.IO.Path]::GetFileNameWithoutExtension($targetPath).ToLowerInvariant() } else { "" }
 $items = New-Object System.Collections.Generic.List[object]
 [NativeBrowserUseApi]::EnumWindows({
   param($handle, $lParam)
@@ -22,9 +36,9 @@ $items = New-Object System.Collections.Generic.List[object]
   $handleString = $handle.ToInt64().ToString()
   $handleMatch = $targetHandle.Length -gt 0 -and $handleString -eq $targetHandle
   $pidMatch = $targetPid -gt 0 -and [int]$windowPid -eq $targetPid
-  $nameMatch = $targetName.Length -gt 0 -and $process.ProcessName.ToLowerInvariant() -eq $targetName
   $pathMatch = $targetPath.Length -gt 0 -and $processPath.Length -gt 0 -and [System.IO.Path]::GetFullPath($processPath).ToLowerInvariant() -eq [System.IO.Path]::GetFullPath($targetPath).ToLowerInvariant()
-  $targetMatch = if ($targetHandle.Length -gt 0) { $handleMatch -and ($targetName.Length -eq 0 -or $pathMatch -or $nameMatch) } elseif ($targetPid -gt 0) { $pidMatch } elseif ($targetPath.Length -gt 0) { $pathMatch -or $nameMatch } else { $false }
+  $hasTarget = $targetHandle.Length -gt 0 -or $targetPid -gt 0 -or $targetPath.Length -gt 0
+  $targetMatch = $hasTarget -and ($targetHandle.Length -eq 0 -or $handleMatch) -and ($targetPid -eq 0 -or $pidMatch) -and ($targetPath.Length -eq 0 -or $pathMatch)
   if (-not $targetMatch) { return $true }
   $frame = [NativeBrowserUseApi]::ReadFrameRect($handle)
   if (($frame.Right - $frame.Left -lt 120) -or ($frame.Bottom - $frame.Top -lt 120)) { return $true }
@@ -39,12 +53,13 @@ $items = New-Object System.Collections.Generic.List[object]
   $area = [double](($frame.Right - $frame.Left) * ($frame.Bottom - $frame.Top))
   $score = $area + $(if ($handleMatch) { 10000000000000 } else { 0 }) + $(if ($pidMatch) { 1000000000000 } else { 0 }) + $(if ($pathMatch) { 100000000000 } else { 0 })
   $dpi = [int][NativeBrowserUseApi]::ReadDpi($handle)
+  $monitorScale = [int][NativeBrowserUseApi]::ReadMonitorScale($monitorHandle)
   $owner = [NativeBrowserUseApi]::GetWindow($handle, 4)
   $rootOwner = [NativeBrowserUseApi]::GetAncestor($handle, 3)
   $items.Add([PSCustomObject]@{
     handle=$handleString; title=$builder.ToString(); className=$classBuilder.ToString(); ownerHandle=$owner.ToInt64().ToString(); rootOwnerHandle=$rootOwner.ToInt64().ToString();
     processId=[int]$windowPid; processName=$process.ProcessName; executablePath=$processPath; bounds=${boundsObject('frame')}; clientBounds=${boundsObject('client')}; dpi=$dpi; score=$score;
-    monitor=[PSCustomObject]@{handle=$monitorHandle.ToInt64().ToString();id=$monitor.szDevice;name=$monitor.szDevice;isPrimary=($monitor.dwFlags -band 1) -eq 1;bounds=${boundsObject('monitor.rcMonitor')};workArea=${boundsObject('monitor.rcWork')};dpi=$dpi;scale=[math]::Round($dpi / 96, 4)}
+    monitor=[PSCustomObject]@{handle=$monitorHandle.ToInt64().ToString();id=$monitor.szDevice;name=$monitor.szDevice;isPrimary=($monitor.dwFlags -band 1) -eq 1;bounds=${boundsObject('monitor.rcMonitor')};workArea=${boundsObject('monitor.rcWork')};dpi=[math]::Round(96 * $monitorScale / 100);scale=[math]::Round($monitorScale / 100, 4)}
   }) | Out-Null
   return $true
 }, [IntPtr]::Zero) | Out-Null
@@ -71,8 +86,9 @@ $processPath = ""; try { $processPath = [string]$process.Path } catch {}
 $owner = [NativeBrowserUseApi]::GetWindow($handle, 4)
 $rootOwner = [NativeBrowserUseApi]::GetAncestor($handle, 3)
 $dpi = [int][NativeBrowserUseApi]::ReadDpi($handle)
+$monitorScale = [int][NativeBrowserUseApi]::ReadMonitorScale($monitorHandle)
 [PSCustomObject]@{
   handle=$handle.ToInt64().ToString(); title=$builder.ToString(); className=$classBuilder.ToString(); ownerHandle=$owner.ToInt64().ToString(); rootOwnerHandle=$rootOwner.ToInt64().ToString();
   processId=[int]$windowPid; processName=$process.ProcessName; executablePath=$processPath; bounds=${boundsObject('frame')}; clientBounds=${boundsObject('client')}; dpi=$dpi;
-  monitor=[PSCustomObject]@{handle=$monitorHandle.ToInt64().ToString();id=$monitor.szDevice;name=$monitor.szDevice;isPrimary=($monitor.dwFlags -band 1) -eq 1;bounds=${boundsObject('monitor.rcMonitor')};workArea=${boundsObject('monitor.rcWork')};dpi=$dpi;scale=[math]::Round($dpi / 96, 4)}
+  monitor=[PSCustomObject]@{handle=$monitorHandle.ToInt64().ToString();id=$monitor.szDevice;name=$monitor.szDevice;isPrimary=($monitor.dwFlags -band 1) -eq 1;bounds=${boundsObject('monitor.rcMonitor')};workArea=${boundsObject('monitor.rcWork')};dpi=[math]::Round(96 * $monitorScale / 100);scale=[math]::Round($monitorScale / 100, 4)}
 } | ConvertTo-Json -Depth 8 -Compress`;

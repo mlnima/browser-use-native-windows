@@ -1,8 +1,7 @@
-import type { NativeInputMouseButton } from '../../types';
-import { mouseSpeedMultiplier, mouseStepDelta, mouseTargetAttempts } from '../../defaults';
+import type { Bounds, NativeInputMouseButton } from '../../types';
+import { mouseSpeedMultiplier, mouseTargetAttempts } from '../../defaults';
 import { sleep } from '../../util/time';
 import { logError } from '../../log';
-import { createHumanMousePath } from './humanMousePath';
 import { createWindowsInputAdapter, getWindowsInputDriverStatus } from './windowsAdapter';
 import type { NativeInputController } from './types';
 
@@ -19,20 +18,6 @@ const mouseButtons: NativeInputMouseButton[] = ['left', 'right', 'middle'];
 
 const cursorAtTarget = (cursor: { x: number; y: number }, target: { x: number; y: number }) =>
   cursor.x === target.x && cursor.y === target.y;
-
-const splitMouseStep = (dx: number, dy: number) => {
-  const parts = Math.max(1, Math.ceil(Math.abs(dx) / mouseStepDelta), Math.ceil(Math.abs(dy) / mouseStepDelta));
-  let movedDx = 0;
-  let movedDy = 0;
-  return Array.from({ length: parts }, (_, index) => {
-    const targetDx = Math.round(dx * (index + 1) / parts);
-    const targetDy = Math.round(dy * (index + 1) / parts);
-    const step = { dx: targetDx - movedDx, dy: targetDy - movedDy };
-    movedDx = targetDx;
-    movedDy = targetDy;
-    return step;
-  }).filter((step) => step.dx !== 0 || step.dy !== 0);
-};
 
 let controller: NativeInputController | null = null;
 
@@ -90,47 +75,24 @@ export const getNativeInputController = () => {
     return cursor;
   };
 
-  const moveMouseHuman = async (dx: number, dy: number) => {
-    const steps = createHumanMousePath(dx, dy);
-    let sentSteps = 0;
-    for (const step of steps) {
-      const splitSteps = splitMouseStep(step.dx, step.dy);
-      for (const splitStep of splitSteps) {
-        await adapter.moveMouseRelative(splitStep.dx, splitStep.dy);
-        sentSteps += 1;
-        await sleep(Math.max(1, Math.round(step.delayMs / splitSteps.length / mouseSpeedMultiplier)));
-      }
-    }
-    return {
-      steps: sentSteps,
-      movedDx: steps.reduce((total, entry) => total + entry.dx, 0),
-      movedDy: steps.reduce((total, entry) => total + entry.dy, 0),
-    };
-  };
-
-  const moveMouseToTarget = async (x: number, y: number) => {
+  const moveMouseToTarget = async (x: number, y: number, desktopBounds: Bounds) => {
     const target = { x: Math.round(x), y: Math.round(y) };
+    if (target.x < desktopBounds.left || target.x >= desktopBounds.right || target.y < desktopBounds.top || target.y >= desktopBounds.bottom) {
+      throw new Error('Native cursor target is outside the current virtual desktop.');
+    }
+    const initial = await readCursorPosition();
     let totalSteps = 0;
-    let totalDx = 0;
-    let totalDy = 0;
     for (let attempt = 0; attempt < mouseTargetAttempts; attempt += 1) {
       const cursor = await readCursorPosition();
-      const dx = target.x - cursor.x;
-      const dy = target.y - cursor.y;
-      if (cursorAtTarget(cursor, target)) return { steps: totalSteps, movedDx: totalDx, movedDy: totalDy };
-      const result = attempt > 0 && Math.abs(dx) <= mouseStepDelta && Math.abs(dy) <= mouseStepDelta
-        ? (await adapter.moveMouseRelative(dx, dy), { steps: 1, movedDx: dx, movedDy: dy })
-        : await moveMouseHuman(dx, dy);
-      totalSteps += result.steps;
-      totalDx += result.movedDx;
-      totalDy += result.movedDy;
+      if (cursorAtTarget(cursor, target)) return { steps: totalSteps, movedDx: target.x - initial.x, movedDy: target.y - initial.y };
+      await adapter.moveMouseAbsolute(target.x, target.y, desktopBounds);
+      totalSteps += 1;
       await sleep(Math.max(1, Math.round(12 / mouseSpeedMultiplier)));
     }
     const cursor = await readCursorPosition();
-    if (!cursorAtTarget(cursor, target)) {
-      logError(`Native cursor failed to reach target ${target.x},${target.y}; current position is ${cursor.x},${cursor.y}.`);
-    }
-    return { steps: totalSteps, movedDx: totalDx, movedDy: totalDy };
+    const message = `Native cursor failed to reach target ${target.x},${target.y}; current position is ${cursor.x},${cursor.y}.`;
+    logError(message);
+    throw new Error(message);
   };
 
   controller = {
@@ -139,9 +101,9 @@ export const getNativeInputController = () => {
       await releaseMouseButtons();
       await adapter.scroll(delta);
     },
-    moveMouseTo: async (x, y) => {
+    moveMouseTo: async (x, y, desktopBounds) => {
       await releaseMouseButtons();
-      return await moveMouseToTarget(x, y);
+      return await moveMouseToTarget(x, y, desktopBounds);
     },
     clickMouse: async (button) => {
       try {
@@ -152,12 +114,12 @@ export const getNativeInputController = () => {
         await releaseMouseButton(button);
       }
     },
-    dragMouseTo: async (x, y, button) => {
+    dragMouseTo: async (x, y, desktopBounds, button) => {
       try {
         await adapter.mouseDown(button);
         pressedButtons.add(button);
         await sleep(randomNumberInRange(25, 70));
-        const result = await moveMouseToTarget(x, y);
+        const result = await moveMouseToTarget(x, y, desktopBounds);
         await sleep(randomNumberInRange(10, 45));
         return result;
       } finally {
@@ -175,11 +137,9 @@ export const getNativeInputController = () => {
       await sleep(humanKeyPauseMs());
     },
     typeText: async (text) => {
-      for (const character of text) {
-        await sleep(randomIntegerInRange(12, 65));
-        await adapter.typeText(character);
-        await sleep(randomIntegerInRange(18, 110));
-      }
+      await sleep(randomIntegerInRange(18, 95));
+      await adapter.typeText(text);
+      await sleep(randomIntegerInRange(18, 110));
     },
     mouseDown: async (button) => {
       await adapter.mouseDown(button);

@@ -29,7 +29,6 @@ export const registerResources = (server: McpServer, state: RuntimeState) => {
                   args: state.browser.args,
                 }
               : null,
-            browserWindow: state.browserWindow,
             lastObservation: state.lastObservation
               ? {
                   token: state.lastObservation.observationToken,

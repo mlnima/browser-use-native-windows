@@ -1,10 +1,11 @@
 import * as z from 'zod/v4';
+import { browserScreenshotXDescription, browserScreenshotYDescription } from '../prompts/browserUse';
 
 const buttonSchema = z.enum(['left', 'right', 'middle']).optional();
 
 const pointFields = {
-  x: z.number(),
-  y: z.number(),
+  x: z.number().describe(browserScreenshotXDescription),
+  y: z.number().describe(browserScreenshotYDescription),
 };
 
 export const actionSchema = z.discriminatedUnion('kind', [
@@ -28,10 +29,10 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('movePoint'), ...pointFields }),
   z.object({
     kind: z.literal('dragPoint'),
-    startX: z.number(),
-    startY: z.number(),
-    endX: z.number(),
-    endY: z.number(),
+    startX: z.number().describe(browserScreenshotXDescription),
+    startY: z.number().describe(browserScreenshotYDescription),
+    endX: z.number().describe(browserScreenshotXDescription),
+    endY: z.number().describe(browserScreenshotYDescription),
     button: buttonSchema,
   }),
   z.object({

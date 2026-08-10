@@ -3,7 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { screenshotMaxBytes, screenshotMaxSide } from '../defaults';
 import type { Bounds, MonitorInfo, ObservedTargetType, ScreenshotMetadata, WindowInfo } from '../types';
-import { boundsHeight, boundsWidth, contentBounds, intersectBounds, intersectBoundsArea, unionBounds } from './geometry';
+import { boundsHeight, boundsWidth, contentBounds, intersectBounds, intersectBoundsArea, resizeLocalBounds, unionBounds } from './geometry';
 import { captureWindowImage, listDisplays } from './windowsWindow';
 
 type NormalizedImage = { buffer: Buffer; contentType: 'image/png' | 'image/jpeg'; width: number; height: number };
@@ -51,7 +51,7 @@ const monitorRows = (displays: MonitorInfo[], target: Bounds) =>
 const selectedMonitor = (monitors: ReturnType<typeof monitorRows>) =>
   monitors.reduce((selected, entry) => entry.intersectionArea > selected.intersectionArea ? entry : selected, monitors[0] || null);
 
-const visibleBounds = (target: Bounds, displays: MonitorInfo[]) => {
+export const visibleBounds = (target: Bounds, displays: MonitorInfo[]) => {
   const intersections = displays.map((display) => intersectBounds(target, display.bounds)).filter((entry): entry is Bounds => !!entry);
   return intersections.length > 0 ? unionBounds(intersections) : target;
 };
@@ -66,13 +66,29 @@ const saveScreenshot = async (buffer: Buffer, contentType: string, screenshotsDi
 
 export const captureObservedScreenshot = async (params: { browser: WindowInfo; target: WindowInfo; targetType: ObservedTargetType; screenshotsDir: string }) => {
   const displays = await listDisplays();
-  const targetBounds = visibleBounds(params.target.bounds, displays);
-  const browserBounds = visibleBounds(params.browser.bounds, displays);
-  const raw = Buffer.from(await captureWindowImage(targetBounds), 'base64');
-  const normalized = await normalizeImage(raw);
-  const screenshotPath = await saveScreenshot(normalized.buffer, normalized.contentType, params.screenshotsDir);
+  const sourceBounds = params.target.clientBounds;
+  const targetBounds = visibleBounds(sourceBounds, displays);
+  const browserBounds = visibleBounds(params.browser.clientBounds, displays);
   const monitors = monitorRows(displays, targetBounds);
   const monitor = selectedMonitor(monitors);
+  if (!monitor || monitor.intersectionArea <= 0) throw new Error('The observed target monitor is unavailable.');
+  const full = Buffer.from(await captureWindowImage({
+    handle: params.target.handle,
+    width: boundsWidth(sourceBounds),
+    height: boundsHeight(sourceBounds),
+  }), 'base64');
+  const crop = {
+    left: targetBounds.left - sourceBounds.left,
+    top: targetBounds.top - sourceBounds.top,
+    width: boundsWidth(targetBounds),
+    height: boundsHeight(targetBounds),
+  };
+  const raw = crop.left === 0 && crop.top === 0 && crop.width === boundsWidth(sourceBounds) && crop.height === boundsHeight(sourceBounds)
+    ? full
+    : await sharp(full).extract(crop).png().toBuffer();
+  const normalized = await normalizeImage(raw);
+  const screenshotPath = await saveScreenshot(normalized.buffer, normalized.contentType, params.screenshotsDir);
+  const rawContentBounds = contentBounds(targetBounds, intersectBounds(params.browser.clientBounds, targetBounds) || targetBounds);
   const metadata: ScreenshotMetadata = {
     contentType: normalized.contentType,
     byteLength: normalized.buffer.byteLength,
@@ -82,15 +98,17 @@ export const captureObservedScreenshot = async (params: { browser: WindowInfo; t
     origin: { x: targetBounds.left, y: targetBounds.top },
     globalBounds: targetBounds,
     browserBounds,
-    browserClientBounds: params.targetType === 'browser-window' ? params.browser.clientBounds : undefined,
+    browserClientBounds: params.targetType === 'browser-window' ? targetBounds : undefined,
     fileDialogBounds: params.targetType === 'file-dialog' ? targetBounds : undefined,
-    contentBounds: params.targetType === 'browser-window' ? contentBounds(params.browser.bounds, params.browser.clientBounds) : undefined,
+    contentBounds: params.targetType === 'browser-window'
+      ? resizeLocalBounds(rawContentBounds, { width: boundsWidth(targetBounds), height: boundsHeight(targetBounds) }, normalized)
+      : undefined,
     virtualBounds: displays.length > 0 ? unionBounds(displays.map((display) => display.bounds)) : targetBounds,
     width: normalized.width || boundsWidth(targetBounds),
     height: normalized.height || boundsHeight(targetBounds),
     monitorIndex: monitor?.index ?? 0,
     monitor: monitor || null,
-    dpi: params.target.dpi || params.target.monitor?.dpi || params.browser.dpi || null,
+    dpi: monitor?.dpi || params.target.monitor?.dpi || params.target.dpi || params.browser.dpi || null,
     monitors,
   };
   return { metadata, screenshotPath, imageBase64: normalized.buffer.toString('base64') };

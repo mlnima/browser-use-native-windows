@@ -1,7 +1,7 @@
 import type { NativeInputMouseButton, Observation, Point } from '../../types';
 import { clickDelayMs, doubleClickDelayMs, scrollDefault, scrollMax, scrollMin } from '../../defaults';
 import { boundsHeight, boundsWidth, localToGlobalPoint, pointInsideBounds } from '../geometry';
-import { bringWindowToTop } from '../windowsWindow';
+import { bringWindowToTop, getForegroundWindow, getForegroundWindowHandle, pointBelongsToWindow, refreshWindow } from '../windowsWindow';
 import { sleep } from '../../util/time';
 import { logError } from '../../log';
 import { getNativeInputController } from './controller';
@@ -33,7 +33,9 @@ const localPoint = (observation: Observation, point: Point) => {
 const requireCursorAtPoint = async (controller: NativeInputController, point: Point, observation: Observation) => {
   const cursor = await controller.getCursorPosition();
   if (!cursor || !pointInsideBounds(cursor, observation.screenshot.globalBounds) || cursor.x !== point.x || cursor.y !== point.y) {
-    logError(`Native cursor missed target ${point.x},${point.y}; current position is ${cursor?.x ?? 'unknown'},${cursor?.y ?? 'unknown'}.`);
+    const message = `Native cursor missed target ${point.x},${point.y}; current position is ${cursor?.x ?? 'unknown'},${cursor?.y ?? 'unknown'}.`;
+    logError(message);
+    throw new Error(message);
   }
 };
 
@@ -41,6 +43,23 @@ const requireCursorInside = async (controller: NativeInputController, observatio
   const cursor = await controller.getCursorPosition();
   if (!cursor || !pointInsideBounds(cursor, observation.screenshot.globalBounds)) {
     throw new Error('Native cursor is outside the observed target; mouse input aborted.');
+  }
+  return cursor;
+};
+
+const requireOwnedTarget = async (observation: Observation, point?: Point) => {
+  if (await getForegroundWindowHandle() !== observation.target.handle) {
+    throw new Error('Owned browser target is not foreground; native input aborted.');
+  }
+  const current = observation.observedTargetType === 'browser-window'
+    ? await refreshWindow(observation.target)
+    : await getForegroundWindow();
+  if (!current || current.handle !== observation.target.handle || current.processId !== observation.target.processId ||
+    current.executablePath.toLowerCase() !== observation.target.executablePath.toLowerCase()) {
+    throw new Error('Owned browser target identity changed; native input aborted.');
+  }
+  if (point && !await pointBelongsToWindow(observation.target.handle, point)) {
+    throw new Error('Native input point is covered by or belongs to another window.');
   }
 };
 
@@ -52,15 +71,19 @@ const clickAt = async (
   doubleClick?: boolean,
   delayMs?: number,
 ) => {
-  await controller.moveMouseTo(point.x, point.y);
-  await requireCursorAtPoint(controller, point, observation);
+  await requireOwnedTarget(observation, point);
+  await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
   await sleep(delayMs ?? clickDelayMs);
+  await requireCursorAtPoint(controller, point, observation);
+  await requireOwnedTarget(observation, point);
   await controller.clickMouse(button);
   if (doubleClick === true) {
     await sleep(doubleClickDelayMs);
     await requireCursorAtPoint(controller, point, observation);
+    await requireOwnedTarget(observation, point);
     await controller.clickMouse(button);
   }
+  return { cursorVerified: true };
 };
 
 const withPressedKeys = async <T>(controller: NativeInputController, keys: string[], run: () => Promise<T>) => {
@@ -98,27 +121,36 @@ const modifierClickPointAction = async (controller: NativeInputController, actio
 const scrollAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'scroll' }>, observation: Observation) => {
   if (typeof action.x === 'number' && typeof action.y === 'number') {
     const point = localPoint(observation, { x: action.x, y: action.y });
-    await controller.moveMouseTo(point.x, point.y);
+    await requireOwnedTarget(observation, point);
+    await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
     await requireCursorAtPoint(controller, point, observation);
   }
-  await requireCursorInside(controller, observation);
+  const cursor = await requireCursorInside(controller, observation);
+  await requireOwnedTarget(observation, cursor);
   await controller.scrollMouse(clampNumber(action.deltaY ?? action.delta ?? scrollDefault, scrollMin, scrollMax));
+  return { cursorVerified: typeof action.x === 'number' && typeof action.y === 'number' };
 };
 
 const dragPointAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'dragPoint' }>, observation: Observation) => {
   const start = localPoint(observation, { x: action.startX, y: action.startY });
   const end = localPoint(observation, { x: action.endX, y: action.endY });
-  await controller.moveMouseTo(start.x, start.y);
+  await requireOwnedTarget(observation, start);
+  await requireOwnedTarget(observation, end);
+  await controller.moveMouseTo(start.x, start.y, observation.screenshot.virtualBounds);
   await requireCursorAtPoint(controller, start, observation);
-  await controller.dragMouseTo(end.x, end.y, normalizeButton(action.button));
+  await requireOwnedTarget(observation, start);
+  await controller.dragMouseTo(end.x, end.y, observation.screenshot.virtualBounds, normalizeButton(action.button));
   await requireCursorAtPoint(controller, end, observation);
+  await requireOwnedTarget(observation, end);
+  return { cursorVerified: true };
 };
 
 export const runNativeAction = async (action: NativeAction, observation: Observation) => {
   if (boundsWidth(observation.screenshot.globalBounds) <= 0 || boundsHeight(observation.screenshot.globalBounds) <= 0) {
     throw new Error('Observed target bounds are not available.');
   }
-  await bringWindowToTop(observation.target.handle);
+  if (!await bringWindowToTop(observation.target.handle)) throw new Error('Observed target could not be made foreground; native input aborted.');
+  await requireOwnedTarget(observation);
   const controller = getNativeInputController();
   if (action.kind === 'clickPoint') return await clickPointAction(controller, action, observation);
   if (action.kind === 'modifierClickPoint') return await modifierClickPointAction(controller, action, observation);
@@ -126,28 +158,36 @@ export const runNativeAction = async (action: NativeAction, observation: Observa
   if (action.kind === 'middleClickPoint') return await clickAt(controller, localPoint(observation, action), observation, 'middle', false, action.delayMs);
   if (action.kind === 'movePoint') {
     const point = localPoint(observation, action);
-    return await controller.moveMouseTo(point.x, point.y);
+    await requireOwnedTarget(observation, point);
+    await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
+    await requireCursorAtPoint(controller, point, observation);
+    await requireOwnedTarget(observation, point);
+    return { cursorVerified: true };
   }
   if (action.kind === 'dragPoint') return await dragPointAction(controller, action, observation);
   if (action.kind === 'typeText') {
+    await requireOwnedTarget(observation);
     await typeText(controller, action.text, action.slowly);
     return action.submit === true ? await controller.pressKey('Enter') : undefined;
   }
   if (action.kind === 'fileDialogUpload') {
     if (observation.observedTargetType !== 'file-dialog') throw new Error('fileDialogUpload requires an active browser-owned file dialog observation.');
+    await requireOwnedTarget(observation);
     await controller.typeText(action.path);
     return await controller.pressKey('Enter');
   }
   if (action.kind === 'press') {
+    await requireOwnedTarget(observation);
     await press(controller, action.key);
     return action.delayMs ? await sleep(action.delayMs) : undefined;
   }
   if (action.kind === 'pressCombo') {
+    await requireOwnedTarget(observation);
     await controller.pressKeyCombo(action.keys.map(normalizeKey));
     return action.delayMs ? await sleep(action.delayMs) : undefined;
   }
-  if (action.kind === 'keyDown') return await controller.keyDown(normalizeKey(action.key));
-  if (action.kind === 'keyUp') return await controller.keyUp(normalizeKey(action.key));
+  if (action.kind === 'keyDown') return await requireOwnedTarget(observation), await controller.keyDown(normalizeKey(action.key));
+  if (action.kind === 'keyUp') return await requireOwnedTarget(observation), await controller.keyUp(normalizeKey(action.key));
   if (action.kind === 'scroll') return await scrollAction(controller, action, observation);
   throw new Error('native input action kind is not supported');
 };

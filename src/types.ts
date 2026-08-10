@@ -50,6 +50,8 @@ export type WindowInfo = {
 
 export type RunningBrowser = {
   pid: number;
+  windowHandle: string;
+  windowProcessId: number;
   exe: BrowserExecutable;
   userDataDir: string;
   startedAt: number;

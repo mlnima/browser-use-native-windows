@@ -15,6 +15,7 @@ import { assertNativeActionAllowed } from '../tools/actionPolicy';
 import { observationResult, toolError } from './toolResults';
 import { textResult } from '../util/json';
 import { sleep } from '../util/time';
+import { browserActToolDescription, browserObserveToolDescription } from '../prompts/browserUse';
 
 const currentObservation = (state: RuntimeState, token: string) => {
   const observation = state.lastObservation;
@@ -24,8 +25,8 @@ const currentObservation = (state: RuntimeState, token: string) => {
 };
 
 const closeTrackedBrowser = async (state: RuntimeState) => {
-  const handle = state.browserWindow?.handle || state.lastObservation?.browser.handle || '';
-  if (!handle) return { closed: false, error: 'No tracked browser HWND is available.' };
+  const handle = state.browser?.launchedByMcp ? state.browser.windowHandle : '';
+  if (!handle) return { closed: false, error: 'No MCP-launched browser HWND is available.' };
   const posted = await closeWindowByHandle(handle);
   if (!posted) return { closed: false, error: 'Browser HWND close message could not be posted.' };
   await sleep(500);
@@ -43,7 +44,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
     'browser_observe',
     {
       title: 'Observe Browser',
-      description: 'Launch or adopt a Windows browser, optionally handle a target URL through native UI, and return a browser-window or browser-owned file-dialog observation.',
+      description: browserObserveToolDescription,
       inputSchema: {
         targetUrl: z.string().optional(),
         inlineImage: z.boolean().optional(),
@@ -64,7 +65,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
     'browser_act',
     {
       title: 'Act In Browser',
-      description: 'Run one native mouse or keyboard action against a matching fresh browser_observe token.',
+      description: browserActToolDescription,
       inputSchema: {
         observationToken: z.string(),
         action: actionSchema,
@@ -76,8 +77,8 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         markObservationConsumed(state);
         const nativeAction = action as NativeAction;
         assertNativeActionAllowed(nativeAction, config);
-        await runNativeAction(nativeAction, await refreshObservedTarget(observation));
-        return textResult({ ok: true, consumedObservationToken: observationToken });
+        const actionResult = await runNativeAction(nativeAction, await refreshObservedTarget(observation, state.browser));
+        return textResult({ ok: true, consumedObservationToken: observationToken, actionResult });
       } catch (error) {
         setLastError(state, error);
         try {

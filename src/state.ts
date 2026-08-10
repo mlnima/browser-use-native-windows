@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Observation, RunningBrowser, TransportMode, WindowInfo } from './types';
+import type { Observation, RunningBrowser, TransportMode } from './types';
 
 export type RuntimeState = {
   sessionId: string;
   transportMode: TransportMode;
   browser: RunningBrowser | null;
-  browserWindow: WindowInfo | null;
+  browserWindow: { handle: string } | null;
   lastObservation: Observation | null;
   lastError: string | null;
 };
