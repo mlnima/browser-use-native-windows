@@ -24,7 +24,7 @@ export const browserStatus = async (state: RuntimeState, config: ServerConfig) =
     : -1;
   const isBrowserForeground = !!browserWindow && await getForegroundWindowHandle() === browserWindow.handle;
   const last = state.lastObservation;
-  const driver = getNativeInputController().driverStatus();
+  const driver = await getNativeInputController().driverStatus();
   state.browserWindow = browserWindow ? { handle: browserWindow.handle } : null;
   return {
     transport: state.transportMode,

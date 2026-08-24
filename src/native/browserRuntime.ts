@@ -6,7 +6,8 @@ import type { RuntimeState } from '../state';
 import { browserWindowFindAttempts, browserWindowFindDelayMs } from '../defaults';
 import { sleep } from '../util/time';
 import { listBrowserExecutables } from './browserExecutable';
-import { findWindowsBrowserWindow, listWindowsBrowserHandles } from './windowsWindow';
+import { runTextCommand } from './processExec';
+import { closeWindowByHandle, findWindowsBrowserWindow, listWindowsBrowserHandles } from './windowsWindow';
 
 const launchArgs = (config: ServerConfig, launchUrl: string) => [
   `--user-data-dir=${config.browserUserDataDir}`,
@@ -76,4 +77,32 @@ export const ensureBrowser = async (state: RuntimeState, config: ServerConfig) =
   state.browser = launched.browser;
   state.browserWindow = { handle: launched.window.handle };
   return { ...launched, launchedNow: true };
+};
+
+export const closeRuntimeBrowser = async (state: RuntimeState) => {
+  const browser = state.browser?.launchedByMcp ? state.browser : null;
+  const handle = browser?.windowHandle || '';
+  if (!handle) return { closed: false, error: 'No MCP-launched browser HWND is available.' };
+  const posted = await closeWindowByHandle(handle);
+  if (posted) await sleep(250);
+  let remaining = await findWindowsBrowserWindow({
+    handle,
+    pid: browser!.windowProcessId,
+    executablePath: browser!.exe.path,
+  });
+  if (remaining && browser?.proc?.pid === browser.windowProcessId) {
+    await runTextCommand('taskkill', ['/PID', String(browser!.windowProcessId), '/T', '/F']).catch(() => '');
+    await sleep(100);
+    remaining = await findWindowsBrowserWindow({
+      handle,
+      pid: browser!.windowProcessId,
+      executablePath: browser!.exe.path,
+    });
+  }
+  const proc = browser?.proc;
+  if (proc && proc.exitCode === null && !proc.killed) proc.kill();
+  state.browser = null;
+  state.browserWindow = null;
+  state.lastObservation = null;
+  return { closed: !remaining, error: remaining ? 'Browser could not be closed.' : null };
 };

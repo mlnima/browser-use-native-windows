@@ -36,7 +36,9 @@ export const captureCurrentTarget = async (browser: WindowInfo, screenshotsDir: 
     if (!await bringWindowToTop(before.target.handle)) throw new Error('Observed target could not be made foreground; screenshot capture aborted.');
     const screenshot = await captureObservedScreenshot({ ...before, screenshotsDir });
     if (!sameMonitor(before.target.monitor, screenshot.metadata.monitor)) continue;
-    const accessibilityNodes = await listAccessibilityNodes(before.target, screenshot.metadata.globalBounds, screenshot.metadata);
+    const accessibilityNodes = before.targetType === 'file-dialog'
+      ? []
+      : await listAccessibilityNodes(before.target, screenshot.metadata.globalBounds, screenshot.metadata);
     const after = await readTarget(before.browser);
     const foreground = await getForegroundWindow();
     if (sameCapture(before, after) && foreground?.handle === before.target.handle) return { ...before, screenshot, accessibilityNodes };

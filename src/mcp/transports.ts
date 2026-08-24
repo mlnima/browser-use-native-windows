@@ -7,6 +7,8 @@ import type { ServerConfig } from '../config';
 import { createRuntimeState } from '../state';
 import { createMcpServer, createStreamableMcpTransport } from './createServer';
 import { logError } from '../log';
+import { closeRuntimeBrowser } from '../native/browserRuntime';
+import { getNativeInputController } from '../native/input/controller';
 export const startStdio = async (config: ServerConfig) => {
   const state = createRuntimeState('stdio');
   const server = createMcpServer(state, config);
@@ -33,10 +35,30 @@ const setCorsHeaders = (_req: express.Request, res: express.Response, next: expr
 };
 export const startHttp = async (config: ServerConfig, mode: 'mcp' | 'sse' | 'all') => {
   const app = express();
+  const state = createRuntimeState(mode === 'sse' ? 'sse' : 'mcp');
   const sseTransports = new Map<string, SSEServerTransport>();
   const streamableTransports = new Map<string, StreamableHTTPServerTransport>();
+  let cleanupTimer: NodeJS.Timeout | null = null;
   const useMcp = mode !== 'sse';
   const useSse = mode !== 'mcp';
+  const cancelCleanup = () => {
+    if (!cleanupTimer) return;
+    clearTimeout(cleanupTimer);
+    cleanupTimer = null;
+  };
+  const scheduleCleanup = () => {
+    if (sseTransports.size > 0 || streamableTransports.size > 0) return;
+    cancelCleanup();
+    cleanupTimer = setTimeout(async () => {
+      cleanupTimer = null;
+      try {
+        await getNativeInputController().releaseAll();
+        if (state.browser) await closeRuntimeBrowser(state);
+      } catch (error) {
+        logError(error);
+      }
+    }, 300);
+  };
   const paths = [...(useMcp ? ['/mcp'] : []), ...(useSse ? ['/sse', '/messages'] : [])];
   app.use(setCorsHeaders);
   app.options('*', (_req, res) => res.sendStatus(204));
@@ -48,10 +70,12 @@ export const startHttp = async (config: ServerConfig, mode: 'mcp' | 'sse' | 'all
   useMcp && app.all('/mcp', async (req, res) => {
     try {
       const sessionId = sessionHeader(req.headers['mcp-session-id']);
+      const initializing = !sessionId && req.method === 'POST' && isInitializeRequest(req.body);
+      if (initializing) cancelCleanup();
       const transport = sessionId
         ? streamableTransports.get(sessionId)
-        : req.method === 'POST' && isInitializeRequest(req.body)
-          ? await createStreamableMcpTransport(config, streamableTransports)
+        : initializing
+          ? await createStreamableMcpTransport(state, config, streamableTransports, scheduleCleanup)
           : null;
       if (!transport) {
         sendMcpError(res, sessionId ? 404 : 400, -32000, 'No valid MCP session');
@@ -65,12 +89,13 @@ export const startHttp = async (config: ServerConfig, mode: 'mcp' | 'sse' | 'all
   });
   useSse && app.get('/sse', async (_req, res) => {
     try {
-      const state = createRuntimeState('sse');
+      cancelCleanup();
       const server = createMcpServer(state, config);
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, transport);
       transport.onclose = () => {
         sseTransports.delete(transport.sessionId);
+        scheduleCleanup();
       };
       await server.connect(transport);
     } catch (error) {

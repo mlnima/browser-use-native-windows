@@ -1,7 +1,7 @@
 export const browserUseNativeWindowsCorePrompt = `
 Use browser-use-native-windows for Windows browser tasks that require a real browser window.
 
-Operate only from the browser_observe app screenshot and Windows accessibility nodes. Every mouse coordinate is a pixel in that screenshot: x starts at 0 on its left edge and y starts at 0 on its top edge. Never calculate or send desktop-global coordinates. Always call browser_observe before browser_act, and use the exact observationToken returned by that observation.
+Operate only from the returned app screenshot and Windows accessibility nodes. Every mouse coordinate is a pixel in that screenshot: x starts at 0 on its left edge and y starts at 0 on its top edge. Never calculate or send desktop-global coordinates. Call browser_observe before the first browser_act, then continue with the fresh observationToken and screenshot returned by each browser_act.
 
 Use targetUrl on browser_observe only when the user task names a page to open. If the user wants the current open browser page, omit targetUrl. If targetUrlStatus is unknown, decide from the screenshot and task context before acting.
 `;
@@ -9,7 +9,7 @@ Use targetUrl on browser_observe only when the user task names a page to open. I
 export const browserUseNativeWindowsNativeInputPrompt = `
 Use native mouse and keyboard actions only. Do not use DOM selectors, browser scripting, Chrome DevTools, Playwright, page evaluation, extensions, or CDP concepts.
 
-For mouse actions, choose points from the returned screenshot coordinate space. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. For file upload dialogs, observe the browser-owned file dialog and either navigate it manually with native actions or use fileDialogUpload when the exact path is known.
+For mouse actions, choose points from the returned screenshot coordinate space. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
 `;
 
 export const browserObserveToolDescription = `
@@ -17,7 +17,15 @@ Launch exactly the configured browser executable with its configured user data a
 `;
 
 export const browserActToolDescription = `
-Run one native action against a matching fresh browser_observe token. Mouse x/y values must be copied from the returned app screenshot or a local accessibility center; the MCP converts them to physical desktop coordinates.
+Run one native action against a matching fresh observation token. The result includes the next fresh observation and screenshot, so continue with that returned token without calling browser_observe again. Mouse x/y values must be copied from the screenshot or an accessibility center.
+`;
+
+export const browserActionDescription = `
+Native action kinds and fields: clickPoint(x,y,button?,doubleClick?), modifierClickPoint(x,y,modifiers), contextClickPoint(x,y), middleClickPoint(x,y), movePoint(x,y), dragPoint(startX,startY,endX,endY,button?), typeText(text,submit?,slowly?), fileDialogUpload(path,x?,y?), press(key), pressCombo(keys), keyDown(key), keyUp(key), scroll(x?,y?,deltaY?).
+`;
+
+export const browserKeyDescription = `
+Key names accept common aliases without case sensitivity, including Ctrl or Control, Alt, Shift, Enter, Tab, Escape, Space, arrows, letters, digits, and symbols.
 `;
 
 export const browserScreenshotXDescription = `

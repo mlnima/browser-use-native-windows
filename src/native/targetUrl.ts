@@ -3,9 +3,8 @@ import type { TargetUrlStatus, WindowInfo } from '../types';
 import { actionAfterNavigationWaitMs } from '../defaults';
 import { sleep } from '../util/time';
 import { getNativeInputController } from './input/controller';
-import { bringWindowToTop, getForegroundWindowHandle, listDisplays, pointBelongsToWindow } from './windowsWindow';
-import { unionBounds } from './geometry';
-import { readBrowserAddressPoint, readCurrentBrowserUrl, urlReached } from './urlReader';
+import { bringWindowToTop, getForegroundWindowHandle } from './windowsWindow';
+import { readCurrentBrowserUrl, urlReached } from './urlReader';
 
 export type TargetUrlResult = {
   currentUrl: string | null;
@@ -29,26 +28,15 @@ const assertAllowedUrl = (url: string, rules: string[]) => {
 const navigateWithNativeInput = async (window: WindowInfo, url: string) => {
   if (!await bringWindowToTop(window.handle)) throw new Error('Browser window could not be made foreground; navigation aborted.');
   const controller = getNativeInputController();
-  const point = await readBrowserAddressPoint(window);
-  const displays = await listDisplays();
-  if (!point || displays.length === 0 || !await pointBelongsToWindow(window.handle, point)) {
-    throw new Error('Owned browser address bar could not be targeted.');
-  }
-  await controller.moveMouseTo(point.x, point.y, unionBounds(displays.map((display) => display.bounds)));
-  const cursor = await controller.getCursorPosition();
-  if (!cursor || cursor.x !== point.x || cursor.y !== point.y || await getForegroundWindowHandle() !== window.handle ||
-    !await pointBelongsToWindow(window.handle, point)) {
-    throw new Error('Owned browser address bar targeting changed; navigation aborted.');
-  }
-  await controller.clickMouse('left');
-  await controller.pressKeyCombo(['Control', 'a']);
+  await controller.pressKeyCombo(['Control', 'l']);
+  if (await getForegroundWindowHandle() !== window.handle) throw new Error('Owned browser focus changed; navigation aborted.');
   await controller.typeText(url);
   await controller.pressKey('Enter');
   await sleep(actionAfterNavigationWaitMs);
-  for (let attempt = 0; attempt < 10; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const currentUrl = await readCurrentBrowserUrl(window);
     if (currentUrl && urlReached(currentUrl, url)) return currentUrl;
-    await sleep(300);
+    await sleep(150);
   }
   throw new Error('Native browser navigation did not reach the requested URL.');
 };

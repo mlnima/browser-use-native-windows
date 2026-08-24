@@ -4,17 +4,18 @@ import type { ServerConfig } from '../config';
 import type { RuntimeState } from '../state';
 import { markObservationConsumed, setLastError } from '../state';
 import { createObservation } from '../observation';
+import { closeRuntimeBrowser } from '../native/browserRuntime';
 import { refreshObservedTarget } from '../native/currentTarget';
-import { runNativeAction } from '../native/input/actions';
+import { assertNativeActionSupported, runNativeAction } from '../native/input/actions';
 import type { NativeAction } from '../native/input/actionTypes';
 import { getNativeInputController } from '../native/input/controller';
-import { closeWindowByHandle } from '../native/windowsWindow';
 import { browserStatus } from '../tools/status';
 import { actionSchema } from '../tools/actionSchema';
 import { assertNativeActionAllowed } from '../tools/actionPolicy';
-import { observationResult, toolError } from './toolResults';
+import { observationErrorResult, observationResult, toolError } from './toolResults';
 import { textResult } from '../util/json';
 import { sleep } from '../util/time';
+import { actionSettleDelayMs } from '../defaults';
 import { browserActToolDescription, browserObserveToolDescription } from '../prompts/browserUse';
 
 const currentObservation = (state: RuntimeState, token: string) => {
@@ -22,21 +23,6 @@ const currentObservation = (state: RuntimeState, token: string) => {
   if (!observation || observation.observationToken !== token) throw new Error('browser_act requires a matching fresh observationToken.');
   if (observation.consumed || observation.stale) throw new Error('browser_act requires a fresh observationToken; this token is stale or consumed.');
   return observation;
-};
-
-const closeTrackedBrowser = async (state: RuntimeState) => {
-  const handle = state.browser?.launchedByMcp ? state.browser.windowHandle : '';
-  if (!handle) return { closed: false, error: 'No MCP-launched browser HWND is available.' };
-  const posted = await closeWindowByHandle(handle);
-  if (!posted) return { closed: false, error: 'Browser HWND close message could not be posted.' };
-  await sleep(500);
-  const proc = state.browser?.proc;
-  if (state.browser?.launchedByMcp && proc && proc.exitCode === null && !proc.killed) {
-    proc.kill();
-  }
-  state.browser = null;
-  state.browserWindow = null;
-  return { closed: true, error: null };
 };
 
 export const registerTools = (server: McpServer, state: RuntimeState, config: ServerConfig) => {
@@ -72,19 +58,37 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
       },
     },
     async ({ observationToken, action }) => {
+      let consumed = false;
       try {
         const observation = currentObservation(state, observationToken);
-        markObservationConsumed(state);
-        const nativeAction = action as NativeAction;
+        const nativeAction = action as unknown as NativeAction;
         assertNativeActionAllowed(nativeAction, config);
-        const actionResult = await runNativeAction(nativeAction, await refreshObservedTarget(observation, state.browser));
-        return textResult({ ok: true, consumedObservationToken: observationToken, actionResult });
+        assertNativeActionSupported(nativeAction, observation);
+        const refreshed = await refreshObservedTarget(observation, state.browser);
+        markObservationConsumed(state);
+        consumed = true;
+        const actionResult = await runNativeAction(nativeAction, refreshed);
+        await sleep(actionSettleDelayMs);
+        const next = await createObservation({ state, config, inlineImage: true });
+        const details = { consumedObservationToken: observationToken, actionResult };
+        return nativeAction.kind === 'fileDialogUpload' && next.observedTargetType === 'file-dialog'
+          ? observationErrorResult('The file dialog remained open after fileDialogUpload.', next, details)
+          : observationResult(next, details);
       } catch (error) {
         setLastError(state, error);
         try {
           await getNativeInputController().releaseAll();
         } catch (releaseError) {
           setLastError(state, releaseError);
+        }
+        if (consumed && state.browser) {
+          try {
+            await sleep(actionSettleDelayMs);
+            const recovery = await createObservation({ state, config, inlineImage: true });
+            return observationErrorResult(error, recovery, { consumedObservationToken: observationToken });
+          } catch (observationError) {
+            setLastError(state, observationError);
+          }
         }
         return toolError(error);
       }
@@ -124,7 +128,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         release.ok = false;
         release.error = error instanceof Error ? error.message : String(error);
       }
-      const close = closeBrowser === true ? await closeTrackedBrowser(state) : { closed: false, error: null };
+      const close = closeBrowser === true ? await closeRuntimeBrowser(state) : { closed: false, error: null };
       return textResult({ ok: release.ok && !close.error, released: release, close });
     },
   );

@@ -45,6 +45,47 @@ export const windowsNativeKeyCodes: Record<string, NativeWindowsKeyEntry> = {
   '?': { code: 0x35, shift: true },
 };
 
+const keyAliases: Record<string, string> = {
+  alt: 'Alt',
+  backspace: 'Backspace',
+  cmd: 'Meta',
+  command: 'Meta',
+  control: 'Control',
+  ctrl: 'Control',
+  del: 'Delete',
+  delete: 'Delete',
+  down: 'Down',
+  enter: 'Enter',
+  esc: 'Escape',
+  escape: 'Escape',
+  home: 'Home',
+  left: 'Left',
+  meta: 'Meta',
+  return: 'Enter',
+  right: 'Right',
+  shift: 'Shift',
+  space: 'Space',
+  tab: 'Tab',
+  up: 'Up',
+  win: 'Meta',
+  windows: 'Meta',
+};
+
+export const normalizeWindowsKey = (key: string) => {
+  const trimmed = key.trim();
+  const withoutArrow = trimmed.toLowerCase().startsWith('arrow') ? trimmed.slice(5) : trimmed;
+  return withoutArrow.length === 1
+    ? withoutArrow
+    : keyAliases[withoutArrow.toLowerCase()] || withoutArrow;
+};
+
+export const windowsKeyEntry = (key: string) => {
+  const normalized = normalizeWindowsKey(key);
+  const entry = windowsNativeKeyCodes[normalized];
+  if (!entry) throw new Error(`Unsupported native input key: ${key}`);
+  return entry;
+};
+
 const shiftedDigits: Record<string, string> = {
   '!': '1',
   '@': '2',

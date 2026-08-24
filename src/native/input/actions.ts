@@ -1,22 +1,16 @@
 import type { NativeInputMouseButton, Observation, Point } from '../../types';
 import { clickDelayMs, doubleClickDelayMs, scrollDefault, scrollMax, scrollMin } from '../../defaults';
 import { boundsHeight, boundsWidth, localToGlobalPoint, pointInsideBounds } from '../geometry';
-import { bringWindowToTop, getForegroundWindow, getForegroundWindowHandle, pointBelongsToWindow, refreshWindow } from '../windowsWindow';
+import { bringWindowToTop, foregroundBrowserOwnedFileDialog, getForegroundWindow, getForegroundWindowHandle, pointBelongsToWindow, refreshWindow } from '../windowsWindow';
 import { sleep } from '../../util/time';
 import { logError } from '../../log';
 import { getNativeInputController } from './controller';
+import { normalizeWindowsKey, windowsKeyEntry } from './keyMap';
 import type { NativeAction } from './actionTypes';
 import type { NativeInputController } from './types';
 
 const clampNumber = (value: number, minimum: number, maximum: number) =>
   Math.min(Math.max(value, minimum), maximum);
-
-const normalizeKey = (key: string) =>
-  key === 'Return'
-    ? 'Enter'
-    : key.startsWith('Arrow')
-      ? key.slice('Arrow'.length)
-      : key;
 
 const normalizeButton = (button?: NativeInputMouseButton): NativeInputMouseButton =>
   button === 'right' || button === 'middle' ? button : 'left';
@@ -87,7 +81,7 @@ const clickAt = async (
 };
 
 const withPressedKeys = async <T>(controller: NativeInputController, keys: string[], run: () => Promise<T>) => {
-  const normalized = keys.filter(Boolean).map(normalizeKey);
+  const normalized = keys.filter(Boolean).map(normalizeWindowsKey);
   try {
     for (const key of normalized) await controller.keyDown(key);
     return await run();
@@ -105,10 +99,54 @@ const typeText = async (controller: NativeInputController, text: string, slowly?
 };
 
 const press = async (controller: NativeInputController, key: string) => {
-  const keys = key.split('+').map((entry) => normalizeKey(entry.trim())).filter(Boolean);
+  const keys = key.split('+').map((entry) => normalizeWindowsKey(entry)).filter(Boolean);
   return keys.length > 1
     ? await controller.pressKeyCombo(keys)
-    : await controller.pressKey(normalizeKey(key));
+    : await controller.pressKey(normalizeWindowsKey(key));
+};
+
+export const assertNativeActionSupported = (action: NativeAction, observation: Observation) => {
+  const keys = action.kind === 'modifierClickPoint'
+    ? action.modifiers
+    : action.kind === 'press'
+      ? action.key.split('+')
+      : action.kind === 'pressCombo'
+        ? action.keys
+        : action.kind === 'keyDown' || action.kind === 'keyUp'
+          ? [action.key]
+          : [];
+  keys.filter(Boolean).forEach((key) => windowsKeyEntry(key));
+  if (action.kind === 'fileDialogUpload' && observation.observedTargetType !== 'file-dialog') {
+    if (typeof action.x !== 'number' || typeof action.y !== 'number') {
+      throw new Error('fileDialogUpload requires file chooser x/y when the file dialog is not already open.');
+    }
+  }
+};
+
+const waitForFileDialog = async (observation: Observation) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const dialog = await foregroundBrowserOwnedFileDialog(observation.browser);
+    if (dialog) return { ...observation, observedTargetType: 'file-dialog' as const, target: dialog };
+    await sleep(100);
+  }
+  throw new Error('The browser-owned file dialog did not open.');
+};
+
+const fileDialogUploadAction = async (
+  controller: NativeInputController,
+  action: Extract<NativeAction, { kind: 'fileDialogUpload' }>,
+  observation: Observation,
+) => {
+  let dialogObservation = observation;
+  if (observation.observedTargetType !== 'file-dialog') {
+    await clickAt(controller, localPoint(observation, { x: action.x!, y: action.y! }), observation, 'left');
+    dialogObservation = await waitForFileDialog(observation);
+  }
+  await requireOwnedTarget(dialogObservation);
+  await controller.pressKeyCombo(['Alt', 'n']);
+  await controller.pressKeyCombo(['Control', 'a']);
+  await controller.typeText(action.path);
+  return await controller.pressKey('Enter');
 };
 
 const clickPointAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'clickPoint' }>, observation: Observation) =>
@@ -171,10 +209,7 @@ export const runNativeAction = async (action: NativeAction, observation: Observa
     return action.submit === true ? await controller.pressKey('Enter') : undefined;
   }
   if (action.kind === 'fileDialogUpload') {
-    if (observation.observedTargetType !== 'file-dialog') throw new Error('fileDialogUpload requires an active browser-owned file dialog observation.');
-    await requireOwnedTarget(observation);
-    await controller.typeText(action.path);
-    return await controller.pressKey('Enter');
+    return await fileDialogUploadAction(controller, action, observation);
   }
   if (action.kind === 'press') {
     await requireOwnedTarget(observation);
@@ -183,11 +218,11 @@ export const runNativeAction = async (action: NativeAction, observation: Observa
   }
   if (action.kind === 'pressCombo') {
     await requireOwnedTarget(observation);
-    await controller.pressKeyCombo(action.keys.map(normalizeKey));
+    await controller.pressKeyCombo(action.keys.map(normalizeWindowsKey));
     return action.delayMs ? await sleep(action.delayMs) : undefined;
   }
-  if (action.kind === 'keyDown') return await requireOwnedTarget(observation), await controller.keyDown(normalizeKey(action.key));
-  if (action.kind === 'keyUp') return await requireOwnedTarget(observation), await controller.keyUp(normalizeKey(action.key));
+  if (action.kind === 'keyDown') return await requireOwnedTarget(observation), await controller.keyDown(normalizeWindowsKey(action.key));
+  if (action.kind === 'keyUp') return await requireOwnedTarget(observation), await controller.keyUp(normalizeWindowsKey(action.key));
   if (action.kind === 'scroll') return await scrollAction(controller, action, observation);
   throw new Error('native input action kind is not supported');
 };

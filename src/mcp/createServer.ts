@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { packageName } from '../defaults';
 import type { ServerConfig } from '../config';
-import { createRuntimeState, type RuntimeState } from '../state';
+import type { RuntimeState } from '../state';
 import { registerPrompts } from './registerPrompts';
 import { registerResources } from './registerResources';
 import { registerTools } from './registerTools';
@@ -20,8 +20,10 @@ export const createMcpServer = (state: RuntimeState, config: ServerConfig) => {
 };
 
 export const createStreamableMcpTransport = async (
+  state: RuntimeState,
   config: ServerConfig,
   transports: Map<string, StreamableHTTPServerTransport>,
+  onClose: () => void,
 ) => {
   let transport: StreamableHTTPServerTransport;
   transport = new StreamableHTTPServerTransport({
@@ -31,7 +33,8 @@ export const createStreamableMcpTransport = async (
   transport.onclose = () => {
     const sessionId = transport.sessionId;
     if (sessionId) transports.delete(sessionId);
+    onClose();
   };
-  await createMcpServer(createRuntimeState('mcp'), config).connect(transport);
+  await createMcpServer(state, config).connect(transport);
   return transport;
 };

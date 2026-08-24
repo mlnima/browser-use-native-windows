@@ -1,6 +1,6 @@
 # browser-use-native-windows
 
-Windows-only MCP server for controlling a real Chromium browser with native screenshots, Windows accessibility, and `node-interception` mouse/keyboard input.
+Windows-only MCP server for controlling a real Chromium browser with native screenshots, Windows accessibility, and Windows mouse/keyboard input.
 
 It does not use CDP, Chrome DevTools, Playwright, Puppeteer, browser extensions, DOM selectors, DOM snapshots, or page JavaScript evaluation.
 
@@ -11,16 +11,6 @@ Every observation re-detects the browser window, monitor, physical resolution, m
 - Windows
 - Node.js 20+
 - Chromium-based browser: Edge, Chrome, Brave, Chromium, Vivaldi, Opera, Yandex
-- `node-interception` driver
-
-Install the native input package and driver from an administrator terminal:
-
-```powershell
-npm install -g node-interception
-node-interception /install
-```
-
-Reboot Windows after driver installation.
 
 ## Install
 

@@ -12,6 +12,5 @@ export default defineConfig({
     'express',
     'sharp',
     'zod',
-    'node-interception',
   ],
 });

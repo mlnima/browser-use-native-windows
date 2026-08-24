@@ -21,5 +21,5 @@ export type NativeInputController = NativeInputAdapter & {
   clickMouse: (button: NativeInputMouseButton) => Promise<void>;
   dragMouseTo: (x: number, y: number, desktopBounds: Bounds, button: NativeInputMouseButton) => Promise<{ steps: number; movedDx: number; movedDy: number }>;
   releaseAll: () => Promise<void>;
-  driverStatus: () => { available: boolean; error: string | null };
+  driverStatus: () => Promise<{ available: boolean; error: string | null }>;
 };

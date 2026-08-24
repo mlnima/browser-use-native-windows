@@ -46,11 +46,10 @@ $left = ${Math.round(capture.left)}; $top = ${Math.round(capture.top)}; $right =
 $maxNodes = ${accessibilityMaxNodes}
   $root = [System.Windows.Automation.AutomationElement]::FromHandle($h); $items = New-Object System.Collections.Generic.List[object]
   if ($root -ne $null) {
-    foreach ($controlType in $controlTypes) {
-      if ($items.Count -ge $maxNodes) { break }
-      $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $controlType)
-      $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $condition)
-      for ($index = 0; $index -lt $elements.Count -and $items.Count -lt $maxNodes; $index++) {
+    $conditions = @($controlTypes | ForEach-Object { [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $_) })
+    $condition = [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]$conditions)
+    $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $condition)
+    for ($index = 0; $index -lt $elements.Count -and $items.Count -lt $maxNodes; $index++) {
     try {
       $element = $elements.Item($index); $current = $element.Current
       if ($current.IsOffscreen) { continue }
@@ -78,8 +77,7 @@ $maxNodes = ${accessibilityMaxNodes}
         globalBounds=[PSCustomObject]@{left=[int][Math]::Round($clipLeft);top=[int][Math]::Round($clipTop);right=[int][Math]::Round($clipRight);bottom=[int][Math]::Round($clipBottom)};
         center=[PSCustomObject]@{x=[int]($cx-$left);y=[int]($cy-$top)};globalCenter=[PSCustomObject]@{x=$cx;y=$cy}
       }) | Out-Null
-      } catch {}
-    }
+    } catch {}
   }
 }
 @($items.ToArray()) | ConvertTo-Json -Depth 8 -Compress`;

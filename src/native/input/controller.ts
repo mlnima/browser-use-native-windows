@@ -12,7 +12,7 @@ const randomIntegerInRange = (minimum: number, maximum: number) =>
   Math.round(randomNumberInRange(minimum, maximum));
 
 const humanKeyPauseMs = () =>
-  randomIntegerInRange(18, 95);
+  randomIntegerInRange(8, 25);
 
 const mouseButtons: NativeInputMouseButton[] = ['left', 'right', 'middle'];
 
@@ -109,7 +109,7 @@ export const getNativeInputController = () => {
       try {
         await adapter.mouseDown(button);
         pressedButtons.add(button);
-        await sleep(randomNumberInRange(20, 55));
+        await sleep(randomNumberInRange(12, 28));
       } finally {
         await releaseMouseButton(button);
       }
@@ -118,9 +118,9 @@ export const getNativeInputController = () => {
       try {
         await adapter.mouseDown(button);
         pressedButtons.add(button);
-        await sleep(randomNumberInRange(25, 70));
+        await sleep(randomNumberInRange(15, 35));
         const result = await moveMouseToTarget(x, y, desktopBounds);
-        await sleep(randomNumberInRange(10, 45));
+        await sleep(randomNumberInRange(8, 20));
         return result;
       } finally {
         await releaseMouseButton(button);
@@ -137,9 +137,9 @@ export const getNativeInputController = () => {
       await sleep(humanKeyPauseMs());
     },
     typeText: async (text) => {
-      await sleep(randomIntegerInRange(18, 95));
+      await sleep(randomIntegerInRange(8, 25));
       await adapter.typeText(text);
-      await sleep(randomIntegerInRange(18, 110));
+      await sleep(randomIntegerInRange(8, 30));
     },
     mouseDown: async (button) => {
       await adapter.mouseDown(button);
