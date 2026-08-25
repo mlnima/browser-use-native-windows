@@ -17,6 +17,7 @@ import { textResult } from '../util/json';
 import { sleep } from '../util/time';
 import { actionSettleDelayMs } from '../defaults';
 import { browserActToolDescription, browserObserveToolDescription } from '../prompts/browserUse';
+import type { RuntimeCoordinator } from './runtimeCoordinator';
 
 const currentObservation = (state: RuntimeState, token: string) => {
   const observation = state.lastObservation;
@@ -25,7 +26,12 @@ const currentObservation = (state: RuntimeState, token: string) => {
   return observation;
 };
 
-export const registerTools = (server: McpServer, state: RuntimeState, config: ServerConfig) => {
+export const registerTools = (
+  server: McpServer,
+  state: RuntimeState,
+  config: ServerConfig,
+  coordinator: RuntimeCoordinator,
+) => {
   server.registerTool(
     'browser_observe',
     {
@@ -36,7 +42,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         inlineImage: z.boolean().optional(),
       },
     },
-    async ({ targetUrl, inlineImage }) => {
+    async ({ targetUrl, inlineImage }) => await coordinator.run(async () => {
       try {
         const observation = await createObservation({ state, config, targetUrl, inlineImage });
         return observationResult(observation);
@@ -44,7 +50,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         setLastError(state, error);
         return toolError(error);
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -57,7 +63,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         action: actionSchema,
       },
     },
-    async ({ observationToken, action }) => {
+    async ({ observationToken, action }) => await coordinator.run(async () => {
       let consumed = false;
       try {
         const observation = currentObservation(state, observationToken);
@@ -92,7 +98,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         }
         return toolError(error);
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -101,14 +107,14 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
       title: 'Browser Status',
       description: 'Return MCP transport, native input driver, browser process, HWND, monitor, DPI, focus, and observation state.',
     },
-    async () => {
+    async () => await coordinator.run(async () => {
       try {
         return textResult({ ok: true, status: await browserStatus(state, config) });
       } catch (error) {
         setLastError(state, error);
         return toolError(error);
       }
-    },
+    }),
   );
 
   server.registerTool(
@@ -120,7 +126,7 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
         closeBrowser: z.boolean().optional(),
       },
     },
-    async ({ closeBrowser }) => {
+    async ({ closeBrowser }) => await coordinator.run(async () => {
       const release: { ok: boolean; error: string | null } = { ok: true, error: null };
       try {
         await getNativeInputController().releaseAll();
@@ -130,6 +136,6 @@ export const registerTools = (server: McpServer, state: RuntimeState, config: Se
       }
       const close = closeBrowser === true ? await closeRuntimeBrowser(state) : { closed: false, error: null };
       return textResult({ ok: release.ok && !close.error, released: release, close });
-    },
+    }),
   );
 };
