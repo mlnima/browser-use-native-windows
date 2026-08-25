@@ -33,9 +33,8 @@ const waitForWindow = async (exe: BrowserExecutable, previousHandles: Set<string
   return null;
 };
 
-const launchBrowser = async (exe: BrowserExecutable, config: ServerConfig) => {
+const launchBrowser = async (exe: BrowserExecutable, config: ServerConfig, launchUrl: string) => {
   fs.mkdirSync(config.browserUserDataDir, { recursive: true });
-  const launchUrl = 'about:blank';
   const previousHandles = new Set(await listWindowsBrowserHandles(exe.path));
   const args = launchArgs(config, launchUrl);
   const proc = spawn(exe.path, args, { stdio: 'ignore', windowsHide: false, detached: false });
@@ -73,7 +72,7 @@ export const ensureBrowser = async (state: RuntimeState, config: ServerConfig) =
     return { browser: current, window: tracked, launchedNow: false };
   }
   if (current?.launchedByMcp && current.proc?.exitCode === null && !current.proc.killed) current.proc.kill();
-  const launched = await launchBrowser(executables[0]!, config);
+  const launched = await launchBrowser(executables[0]!, config, `about:blank#${state.sessionId}`);
   state.browser = launched.browser;
   state.browserWindow = { handle: launched.window.handle };
   return { ...launched, launchedNow: true };
