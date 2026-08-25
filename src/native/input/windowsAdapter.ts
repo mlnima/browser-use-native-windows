@@ -58,8 +58,8 @@ export const createWindowsInputAdapter = (): NativeInputAdapter => ({
   mouseDown: async (button) => await sendMouse(mouseFlags[button].down),
   mouseUp: async (button) => await sendMouse(mouseFlags[button].up),
   scroll: async (delta) => await sendMouse(0x0800, 0, 0, delta),
-  keyDown: async (key) => await runNativeScript(keyCall(windowsKeyEntry(key), true)),
-  keyUp: async (key) => await runNativeScript(keyCall(windowsKeyEntry(key), false)),
+  keyDown: async (key) => { await runNativeScript(keyCall(windowsKeyEntry(key), true)); },
+  keyUp: async (key) => { await runNativeScript(keyCall(windowsKeyEntry(key), false)); },
   pressKey: async (key) => await pressEntries([], windowsKeyEntry(key)),
   pressKeyCombo: async (keys) => {
     const entries = keys.map(windowsKeyEntry);

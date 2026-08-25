@@ -89,7 +89,7 @@ export const closeRuntimeBrowser = async (state: RuntimeState) => {
     pid: browser!.windowProcessId,
     executablePath: browser!.exe.path,
   });
-  if (remaining && browser?.proc?.pid === browser.windowProcessId) {
+  if (browser && remaining && browser.proc?.pid === browser.windowProcessId) {
     await runTextCommand('taskkill', ['/PID', String(browser!.windowProcessId), '/T', '/F']).catch(() => '');
     await sleep(100);
     remaining = await findWindowsBrowserWindow({
