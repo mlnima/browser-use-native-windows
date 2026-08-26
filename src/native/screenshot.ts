@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { screenshotMaxBytes, screenshotMaxSide } from '../defaults';
-import type { Bounds, MonitorInfo, ObservedTargetType, ScreenshotMetadata, WindowInfo } from '../types';
-import { boundsHeight, boundsWidth, contentBounds, intersectBounds, intersectBoundsArea, resizeLocalBounds, unionBounds } from './geometry';
+import type { Bounds, MonitorInfo, ObservedTargetType, Point, ScreenshotMetadata, WindowInfo } from '../types';
+import { boundsHeight, boundsWidth, contentBounds, intersectBounds, intersectBoundsArea, pointInsideBounds, resizeLocalBounds, unionBounds } from './geometry';
 import { captureWindowImage, listDisplays } from './windowsWindow';
+import { readWindowsCursorPosition } from './input/windowsAdapter';
 
 type NormalizedImage = { buffer: Buffer; contentType: 'image/png' | 'image/jpeg'; width: number; height: number };
 
@@ -51,6 +52,14 @@ const monitorRows = (displays: MonitorInfo[], target: Bounds) =>
 const selectedMonitor = (monitors: ReturnType<typeof monitorRows>) =>
   monitors.reduce((selected, entry) => entry.intersectionArea > selected.intersectionArea ? entry : selected, monitors[0] || null);
 
+const samePoint = (left: Point | null, right: Point | null) =>
+  !!left && !!right && left.x === right.x && left.y === right.y;
+
+const resizePoint = (point: Point, from: Bounds, to: { width: number; height: number }) => ({
+  x: Math.round((point.x - from.left) * to.width / Math.max(1, boundsWidth(from))),
+  y: Math.round((point.y - from.top) * to.height / Math.max(1, boundsHeight(from))),
+});
+
 export const visibleBounds = (target: Bounds, displays: MonitorInfo[]) => {
   const intersections = displays.map((display) => intersectBounds(target, display.bounds)).filter((entry): entry is Bounds => !!entry);
   return intersections.length > 0 ? unionBounds(intersections) : target;
@@ -72,11 +81,15 @@ export const captureObservedScreenshot = async (params: { browser: WindowInfo; t
   const monitors = monitorRows(displays, targetBounds);
   const monitor = selectedMonitor(monitors);
   if (!monitor || monitor.intersectionArea <= 0) throw new Error('The observed target monitor is unavailable.');
+  const cursorBefore = await readWindowsCursorPosition();
   const full = Buffer.from(await captureWindowImage({
     handle: params.target.handle,
+    left: sourceBounds.left,
+    top: sourceBounds.top,
     width: boundsWidth(sourceBounds),
     height: boundsHeight(sourceBounds),
   }), 'base64');
+  const cursorAfter = await readWindowsCursorPosition();
   const crop = {
     left: targetBounds.left - sourceBounds.left,
     top: targetBounds.top - sourceBounds.top,
@@ -87,6 +100,8 @@ export const captureObservedScreenshot = async (params: { browser: WindowInfo; t
     ? full
     : await sharp(full).extract(crop).png().toBuffer();
   const normalized = await normalizeImage(raw);
+  const stableCursor = samePoint(cursorBefore, cursorAfter) ? cursorAfter : null;
+  const cursorVisible = !!stableCursor && pointInsideBounds(stableCursor, targetBounds);
   const screenshotPath = await saveScreenshot(normalized.buffer, normalized.contentType, params.screenshotsDir);
   const rawContentBounds = contentBounds(targetBounds, intersectBounds(params.browser.clientBounds, targetBounds) || targetBounds);
   const metadata: ScreenshotMetadata = {
@@ -110,6 +125,11 @@ export const captureObservedScreenshot = async (params: { browser: WindowInfo; t
     monitor: monitor || null,
     dpi: monitor?.dpi || params.target.monitor?.dpi || params.target.dpi || params.browser.dpi || null,
     monitors,
+    cursor: {
+      visible: cursorVisible,
+      position: cursorVisible ? resizePoint(stableCursor!, targetBounds, normalized) : null,
+      globalPosition: stableCursor,
+    },
   };
   return { metadata, screenshotPath, imageBase64: normalized.buffer.toString('base64') };
 };

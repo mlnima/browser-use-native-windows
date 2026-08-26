@@ -22,6 +22,10 @@ const publicObservation = (observation: Observation) => ({
     width: observation.screenshot.width,
     height: observation.screenshot.height,
     contentBounds: observation.screenshot.contentBounds,
+    cursor: {
+      visible: observation.screenshot.cursor.visible,
+      position: observation.screenshot.cursor.position,
+    },
   },
   accessibilityNodes: observation.accessibilityNodes.map((node) => ({
     id: node.id,

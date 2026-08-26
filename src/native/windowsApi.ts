@@ -7,6 +7,8 @@ using System.Text;
 using System.Runtime.InteropServices;
 public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 public struct POINT { public int X; public int Y; }
+[StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize; public uint flags; public IntPtr hCursor; public POINT ptScreenPos; }
+[StructLayout(LayoutKind.Sequential)] public struct ICONINFO { public bool fIcon; public uint xHotspot; public uint yHotspot; public IntPtr hbmMask; public IntPtr hbmColor; }
 [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public UIntPtr dwExtraInfo; }
 [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public UIntPtr dwExtraInfo; }
 [StructLayout(LayoutKind.Explicit)] public struct INPUTUNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
@@ -57,6 +59,10 @@ public static class NativeBrowserUseApi {
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+  [DllImport("user32.dll")] static extern bool GetCursorInfo(ref CURSORINFO info);
+  [DllImport("user32.dll")] static extern bool GetIconInfo(IntPtr icon, out ICONINFO info);
+  [DllImport("user32.dll")] static extern bool DrawIconEx(IntPtr dc, int x, int y, IntPtr icon, int width, int height, uint step, IntPtr brush, uint flags);
+  [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr value);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out RECT rect, int size);
   [DllImport("shcore.dll")] public static extern int GetScaleFactorForMonitor(IntPtr monitor, out int scale);
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtr")] static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int index);
@@ -75,6 +81,23 @@ public static class NativeBrowserUseApi {
   public static uint ReadDpi(IntPtr hWnd) { uint dpi = GetDpiForWindow(hWnd); if (dpi == 0) throw new InvalidOperationException("Window DPI is unavailable."); return dpi; }
   public static int ReadMonitorScale(IntPtr monitor) { int scale; if (GetScaleFactorForMonitor(monitor, out scale) != 0 || scale <= 0) throw new InvalidOperationException("Monitor scale is unavailable."); return scale; }
   public static bool GetCursorPos(out POINT point) { if (!ReadPhysicalCursor(out point)) throw new InvalidOperationException("Physical cursor position is unavailable."); return true; }
+  public static bool DrawVisibleCursor(IntPtr dc, int left, int top, int width, int height) {
+    CURSORINFO cursor = new CURSORINFO { cbSize = Marshal.SizeOf(typeof(CURSORINFO)) };
+    if (!GetCursorInfo(ref cursor)) throw new InvalidOperationException("Native cursor image is unavailable.");
+    POINT point = cursor.ptScreenPos;
+    if ((cursor.flags & 1) == 0 || point.X < left || point.Y < top || point.X >= left + width || point.Y >= top + height) return false;
+    ICONINFO icon;
+    if (!GetIconInfo(cursor.hCursor, out icon)) throw new InvalidOperationException("Native cursor icon is unavailable.");
+    try {
+      if (!DrawIconEx(dc, point.X - left - (int)icon.xHotspot, point.Y - top - (int)icon.yHotspot, cursor.hCursor, 0, 0, 0, IntPtr.Zero, 3)) {
+        throw new InvalidOperationException("Native cursor could not be rendered in the screenshot.");
+      }
+      return true;
+    } finally {
+      if (icon.hbmMask != IntPtr.Zero) DeleteObject(icon.hbmMask);
+      if (icon.hbmColor != IntPtr.Zero) DeleteObject(icon.hbmColor);
+    }
+  }
   public static void SendMouse(int x, int y, int data, uint flags) {
     INPUT input = new INPUT { type = 0, data = new INPUTUNION { mi = new MOUSEINPUT { dx = x, dy = y, mouseData = unchecked((uint)data), dwFlags = flags } } };
     if (SendInput(1, new INPUT[] { input }, Marshal.SizeOf(typeof(INPUT))) != 1) throw new InvalidOperationException("Native mouse input failed.");

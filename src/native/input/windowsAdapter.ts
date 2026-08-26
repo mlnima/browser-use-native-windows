@@ -44,7 +44,7 @@ ${up.join('\n')}
 }`);
 };
 
-const readCursorPosition = async (): Promise<Point | null> =>
+export const readWindowsCursorPosition = async (): Promise<Point | null> =>
   JSON.parse(await runNativeScript(`$point = New-Object POINT
 [NativeBrowserUseApi]::GetCursorPos([ref]$point) | Out-Null
 [PSCustomObject]@{x=[int]$point.X;y=[int]$point.Y} | ConvertTo-Json -Compress`) || 'null') as Point | null;
@@ -80,7 +80,7 @@ export const createWindowsInputAdapter = (): NativeInputAdapter => ({
   typeText: async (text) => {
     await runNativeScript(`[NativeBrowserUseApi]::SendUnicodeText('${escapePs(text)}')`);
   },
-  getCursorPosition: readCursorPosition,
+  getCursorPosition: readWindowsCursorPosition,
 });
 
 export const getWindowsInputDriverStatus = async () => {

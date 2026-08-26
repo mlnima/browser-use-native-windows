@@ -20,7 +20,6 @@ export const observationSnapshotAttempts = 2;
 export const foregroundWaitAttempts = 10;
 export const foregroundWaitDelayMs = 120;
 export const clickDelayMs = 80;
-export const doubleClickDelayMs = 75;
 export const actionSettleDelayMs = 150;
 export const defaultPageLoadTimeoutMs = 10000;
 export const pageLoadPollIntervalMs = 250;

@@ -55,6 +55,8 @@ const differenceRatio = (left: PageVisual, right: PageVisual) => {
 export const capturePageVisual = async (window: WindowInfo) =>
   await visualFromBuffer(Buffer.from(await captureWindowImage({
     handle: window.handle,
+    left: window.clientBounds.left,
+    top: window.clientBounds.top,
     width: boundsWidth(window.clientBounds),
     height: boundsHeight(window.clientBounds),
   }), 'base64'));

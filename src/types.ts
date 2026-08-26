@@ -92,6 +92,11 @@ export type ScreenshotMetadata = {
   monitor: MonitorInfo | null;
   dpi: number | null;
   monitors: Array<MonitorInfo & { index: number; intersectionArea: number }>;
+  cursor: {
+    visible: boolean;
+    position: Point | null;
+    globalPosition: Point | null;
+  };
 };
 
 export type Observation = {

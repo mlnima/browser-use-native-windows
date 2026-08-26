@@ -54,7 +54,7 @@ $h = [IntPtr]::new([Int64]'${escapePs(handle)}')
   return true;
 };
 
-export const captureWindowImage = async (params: { handle: string; width: number; height: number }) => {
+export const captureWindowImage = async (params: { handle: string; left: number; top: number; width: number; height: number }) => {
   ensureWindows();
   return await runPowerShell(`${apiPrelude()}
 Add-Type -AssemblyName System.Drawing
@@ -66,6 +66,7 @@ $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $dc = $graphics.GetHdc()
 try {
   if (-not [NativeBrowserUseApi]::PrintWindow($h, $dc, 3)) { throw 'Handle-bound window capture failed.' }
+  [NativeBrowserUseApi]::DrawVisibleCursor($dc, ${Math.round(params.left)}, ${Math.round(params.top)}, $width, $height) | Out-Null
 } finally { $graphics.ReleaseHdc($dc) }
 $stream = New-Object System.IO.MemoryStream
 $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
