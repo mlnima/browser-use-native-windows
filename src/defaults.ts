@@ -9,6 +9,7 @@ export const defaultForceStopHotkey = 'Control+F12';
 export const screenshotMaxSide = 1600;
 export const screenshotMaxBytes = 5 * 1024 * 1024;
 export const accessibilityMaxNodes = 80;
+export const accessibilityScanMaxNodes = 400;
 export const accessibilityReadTimeoutMs = 3000;
 export const scrollDefault = -720;
 export const scrollMin = -5000;

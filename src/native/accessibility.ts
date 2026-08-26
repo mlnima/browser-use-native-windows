@@ -1,4 +1,4 @@
-import { accessibilityMaxNodes, accessibilityReadTimeoutMs } from '../defaults';
+import { accessibilityMaxNodes, accessibilityReadTimeoutMs, accessibilityScanMaxNodes } from '../defaults';
 import type { AccessibilityNode, Bounds, Point, WindowInfo } from '../types';
 import { runPowerShellJson } from './processExec';
 import { boundsHeight, boundsWidth } from './geometry';
@@ -44,7 +44,7 @@ $h = [IntPtr]::new([Int64]'${escapePs(window.handle)}')
 $left = ${Math.round(capture.left)}; $top = ${Math.round(capture.top)}; $right = ${Math.round(capture.right)}; $bottom = ${Math.round(capture.bottom)}
   $roles = @("Document","CheckBox","RadioButton","Edit","ComboBox","Button","Slider","Spinner","Hyperlink","MenuItem","ListItem")
   $controlTypes = @([System.Windows.Automation.ControlType]::Document,[System.Windows.Automation.ControlType]::CheckBox,[System.Windows.Automation.ControlType]::RadioButton,[System.Windows.Automation.ControlType]::Edit,[System.Windows.Automation.ControlType]::ComboBox,[System.Windows.Automation.ControlType]::Button,[System.Windows.Automation.ControlType]::Slider,[System.Windows.Automation.ControlType]::Spinner,[System.Windows.Automation.ControlType]::Hyperlink,[System.Windows.Automation.ControlType]::MenuItem,[System.Windows.Automation.ControlType]::ListItem)
-$maxNodes = ${accessibilityMaxNodes}
+$maxNodes = ${accessibilityScanMaxNodes}
   $root = [System.Windows.Automation.AutomationElement]::FromHandle($h); $items = New-Object System.Collections.Generic.List[object]
   if ($root -ne $null) {
     $roleConditions = @($controlTypes | ForEach-Object { [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $_) })
