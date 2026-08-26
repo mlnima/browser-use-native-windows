@@ -9,7 +9,7 @@ Use targetUrl on browser_observe only when the user task names a page to open. I
 export const browserUseNativeWindowsNativeInputPrompt = `
 Use native mouse and keyboard actions only. Do not use DOM selectors, browser scripting, Chrome DevTools, Playwright, page evaluation, extensions, or CDP concepts.
 
-For mouse actions, choose points from the returned screenshot coordinate space. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
+For every target represented in accessibilityNodes, use clickNode with that node id. clickNode moves the physical cursor to the returned node center, verifies the cursor, and clicks. Use clickPoint only when no accessibility node represents the visible target; never estimate a point for a named accessibility control. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
 `;
 
 export const browserObserveToolDescription = `
@@ -17,11 +17,11 @@ Launch exactly the configured browser executable with its configured user data a
 `;
 
 export const browserActToolDescription = `
-Run one native action against a matching fresh observation token. The result includes the next fresh observation and screenshot, so continue with that returned token without calling browser_observe again. Mouse x/y values must be copied from the screenshot or an accessibility center.
+Run one native action against a matching fresh observation token. The result includes the next fresh observation and screenshot, so continue with that returned token without calling browser_observe again. Use clickNode for accessibility controls. Raw point clicks that overlap an accessibility control are rejected to prevent clicking a different control.
 `;
 
 export const browserActionDescription = `
-Native action kinds and fields: clickPoint(x,y,button?,doubleClick?), modifierClickPoint(x,y,modifiers), contextClickPoint(x,y), middleClickPoint(x,y), movePoint(x,y), dragPoint(startX,startY,endX,endY,button?), typeText(text,submit?,slowly?), fileDialogUpload(path,x?,y?), press(key), pressCombo(keys), keyDown(key), keyUp(key), scroll(x?,y?,deltaY?).
+Native action kinds and fields: clickNode(nodeId,modifiers?,button?,doubleClick?), clickPoint(x,y,button?,doubleClick?), modifierClickPoint(x,y,modifiers), contextClickPoint(x,y), middleClickPoint(x,y), movePoint(x,y), dragPoint(startX,startY,endX,endY,button?), typeText(text,submit?,slowly?), fileDialogUpload(path,x?,y?), press(key), pressCombo(keys), keyDown(key), keyUp(key), scroll(x?,y?,deltaY?).
 `;
 
 export const browserKeyDescription = `

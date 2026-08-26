@@ -2,6 +2,7 @@ import * as z from 'zod/v4';
 import { browserActionDescription, browserKeyDescription, browserScreenshotXDescription, browserScreenshotYDescription } from '../prompts/browserUse';
 
 const actionKinds = [
+  'clickNode',
   'clickPoint',
   'modifierClickPoint',
   'contextClickPoint',
@@ -18,6 +19,7 @@ const actionKinds = [
 ] as const;
 
 const requiredFields: Record<string, string[]> = {
+  clickNode: ['nodeId'],
   clickPoint: ['x', 'y'],
   modifierClickPoint: ['x', 'y', 'modifiers'],
   contextClickPoint: ['x', 'y'],
@@ -34,6 +36,7 @@ const requiredFields: Record<string, string[]> = {
 
 export const actionSchema = z.object({
   kind: z.enum(actionKinds).describe(browserActionDescription),
+  nodeId: z.string().optional(),
   x: z.number().optional().describe(browserScreenshotXDescription),
   y: z.number().optional().describe(browserScreenshotYDescription),
   startX: z.number().optional(),

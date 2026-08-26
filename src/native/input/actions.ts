@@ -105,6 +105,20 @@ const press = async (controller: NativeInputController, key: string) => {
     : await controller.pressKey(normalizeWindowsKey(key));
 };
 
+const pointClickAction = (action: NativeAction): Point | null =>
+  action.kind === 'clickPoint' || action.kind === 'modifierClickPoint' ||
+  action.kind === 'contextClickPoint' || action.kind === 'middleClickPoint'
+    ? { x: action.x, y: action.y }
+    : null;
+
+const nodeArea = (node: Observation['accessibilityNodes'][number]) =>
+  Math.max(0, node.bounds.right - node.bounds.left) * Math.max(0, node.bounds.bottom - node.bounds.top);
+
+const nodeAtPoint = (observation: Observation, point: Point) =>
+  observation.accessibilityNodes
+    .filter((node) => pointInsideBounds(point, node.bounds))
+    .sort((left, right) => nodeArea(left) - nodeArea(right))[0] || null;
+
 export const assertNativeActionSupported = (action: NativeAction, observation: Observation) => {
   const keys = action.kind === 'modifierClickPoint'
     ? action.modifiers
@@ -116,6 +130,11 @@ export const assertNativeActionSupported = (action: NativeAction, observation: O
           ? [action.key]
           : [];
   keys.filter(Boolean).forEach((key) => windowsKeyEntry(key));
+  const point = pointClickAction(action);
+  const node = point ? nodeAtPoint(observation, point) : null;
+  if (node) {
+    throw new Error(`${action.kind} overlaps accessibility node ${node.id} (${node.role} "${node.name}"). Use clickNode with the intended node id.`);
+  }
   if (action.kind === 'fileDialogUpload' && observation.observedTargetType !== 'file-dialog') {
     if (typeof action.x !== 'number' || typeof action.y !== 'number') {
       throw new Error('fileDialogUpload requires file chooser x/y when the file dialog is not already open.');
@@ -156,6 +175,24 @@ const modifierClickPointAction = async (controller: NativeInputController, actio
   await withPressedKeys(controller, action.modifiers, async () =>
     await clickAt(controller, localPoint(observation, action), observation, normalizeButton(action.button), action.doubleClick, action.delayMs));
 
+const clickNodeAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'clickNode' }>, observation: Observation) => {
+  const node = observation.accessibilityNodes.find((entry) => entry.id === action.nodeId);
+  if (!node) throw new Error(`Accessibility node is unavailable: ${action.nodeId}`);
+  const point = localPoint(observation, node.center);
+  const click = async () => await clickAt(
+    controller,
+    point,
+    observation,
+    normalizeButton(action.button),
+    action.doubleClick,
+    action.delayMs,
+  );
+  const result = action.modifiers?.length
+    ? await withPressedKeys(controller, action.modifiers, click)
+    : await click();
+  return { ...result, nodeId: node.id, nodeName: node.name, target: node.center };
+};
+
 const scrollAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'scroll' }>, observation: Observation) => {
   if (typeof action.x === 'number' && typeof action.y === 'number') {
     const point = localPoint(observation, { x: action.x, y: action.y });
@@ -190,6 +227,7 @@ export const runNativeAction = async (action: NativeAction, observation: Observa
   if (!await bringWindowToTop(observation.target.handle)) throw new Error('Observed target could not be made foreground; native input aborted.');
   await requireOwnedTarget(observation);
   const controller = getNativeInputController();
+  if (action.kind === 'clickNode') return await clickNodeAction(controller, action, observation);
   if (action.kind === 'clickPoint') return await clickPointAction(controller, action, observation);
   if (action.kind === 'modifierClickPoint') return await modifierClickPointAction(controller, action, observation);
   if (action.kind === 'contextClickPoint') return await clickAt(controller, localPoint(observation, action), observation, 'right', false, action.delayMs);

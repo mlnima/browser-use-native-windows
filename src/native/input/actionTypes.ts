@@ -1,6 +1,7 @@
 import type { NativeInputMouseButton } from '../../types';
 
 export type NativeAction =
+  | { kind: 'clickNode'; nodeId: string; modifiers?: string[]; doubleClick?: boolean; button?: NativeInputMouseButton; delayMs?: number }
   | { kind: 'clickPoint'; x: number; y: number; doubleClick?: boolean; button?: NativeInputMouseButton; delayMs?: number }
   | { kind: 'modifierClickPoint'; x: number; y: number; modifiers: string[]; doubleClick?: boolean; button?: NativeInputMouseButton; delayMs?: number }
   | { kind: 'contextClickPoint'; x: number; y: number; delayMs?: number }
@@ -16,6 +17,7 @@ export type NativeAction =
   | { kind: 'scroll'; x?: number; y?: number; delta?: number; deltaY?: number };
 
 export const actionMayLoadPage = (action: NativeAction) =>
+  action.kind === 'clickNode' ||
   action.kind === 'clickPoint' ||
   action.kind === 'modifierClickPoint' ||
   action.kind === 'middleClickPoint' ||
