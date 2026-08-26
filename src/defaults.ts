@@ -20,8 +20,19 @@ export const foregroundWaitAttempts = 10;
 export const foregroundWaitDelayMs = 120;
 export const clickDelayMs = 80;
 export const doubleClickDelayMs = 75;
-export const actionAfterNavigationWaitMs = 150;
 export const actionSettleDelayMs = 150;
+export const defaultPageLoadTimeoutMs = 10000;
+export const pageLoadPollIntervalMs = 250;
+export const pageLoadDetectionWindowMs = 750;
+export const pageLoadMinimumWaitMs = 750;
+export const pageLoadStableSampleCount = 3;
+export const pageLoadSampleWidth = 128;
+export const pageLoadSampleHeight = 72;
+export const pageLoadSampleTopRatio = 0.18;
+export const pageLoadPixelDelta = 8;
+export const pageLoadStablePixelRatio = 0.002;
+export const pageLoadChangedPixelRatio = 0.05;
+export const pageLoadMinimumVariance = 0.02;
 
 export const runtimeDir = () =>
   path.join(os.homedir(), '.browser-use-native-windows');

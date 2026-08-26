@@ -5,6 +5,7 @@ import type { RuntimeState } from './state';
 import { ensureBrowser } from './native/browserRuntime';
 import { captureCurrentTarget } from './native/currentTarget';
 import { handleTargetUrl } from './native/targetUrl';
+import { capturePageVisual, readPageVisual, waitForPageLoad } from './native/pageLoad';
 import { bringWindowToTop, foregroundBrowserOwnedFileDialog } from './native/windowsWindow';
 
 export const createObservation = async (params: {
@@ -12,24 +13,44 @@ export const createObservation = async (params: {
   config: ServerConfig;
   targetUrl?: string;
   inlineImage?: boolean;
+  previousObservation?: Observation;
+  pageLoadStartedAt?: number;
+  waitForLoad?: boolean;
 }): Promise<Observation> => {
   const ensured = await ensureBrowser(params.state, params.config);
   const dialog = await foregroundBrowserOwnedFileDialog(ensured.window);
+  const navigationBaseline = !dialog && params.targetUrl
+    ? await capturePageVisual(ensured.window)
+    : null;
+  const actionBaseline = !dialog && params.waitForLoad && params.previousObservation?.observedTargetType === 'browser-window'
+    ? await readPageVisual(params.previousObservation.screenshotPath)
+    : null;
   const url = dialog
-    ? { currentUrl: null, targetUrlStatus: params.targetUrl ? 'unknown' as const : 'not-provided' as const }
+    ? { currentUrl: null, targetUrlStatus: params.targetUrl ? 'unknown' as const : 'not-provided' as const, loadStartedAt: null }
     : await handleTargetUrl({
         config: params.config,
         window: ensured.window,
         targetUrl: params.targetUrl,
         launchedNow: ensured.launchedNow,
       });
+  const shouldWaitForLoad = !dialog && (url.targetUrlStatus === 'navigated' || params.waitForLoad === true);
+  const currentUrl = shouldWaitForLoad
+    ? await waitForPageLoad({
+        window: ensured.window,
+        baseline: navigationBaseline || actionBaseline,
+        previousUrl: params.previousObservation?.currentUrl || null,
+        startedAt: url.loadStartedAt || params.pageLoadStartedAt || Date.now(),
+        timeoutMs: params.config.pageLoadTimeoutMs,
+        required: url.targetUrlStatus === 'navigated',
+      })
+    : url.currentUrl;
   if (!dialog && !await bringWindowToTop(ensured.window.handle)) throw new Error('Browser window could not be made foreground; screenshot capture aborted.');
   const current = await captureCurrentTarget(ensured.window, params.config.screenshotsDir);
   const observation: Observation = {
     sessionId: params.state.sessionId,
     observationToken: randomUUID(),
     observedTargetType: current.targetType,
-    currentUrl: url.currentUrl,
+    currentUrl,
     targetUrlStatus: url.targetUrlStatus,
     screenshot: current.screenshot.metadata,
     screenshotPath: current.screenshot.screenshotPath,

@@ -14,3 +14,11 @@ export type NativeAction =
   | { kind: 'keyDown'; key: string }
   | { kind: 'keyUp'; key: string }
   | { kind: 'scroll'; x?: number; y?: number; delta?: number; deltaY?: number };
+
+export const actionMayLoadPage = (action: NativeAction) =>
+  action.kind === 'clickPoint' ||
+  action.kind === 'modifierClickPoint' ||
+  action.kind === 'middleClickPoint' ||
+  action.kind === 'press' ||
+  action.kind === 'pressCombo' ||
+  (action.kind === 'typeText' && action.submit === true);

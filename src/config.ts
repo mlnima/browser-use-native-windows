@@ -7,6 +7,7 @@ import {
   defaultSsePort,
   defaultUserDataDir,
   defaultForceStopHotkey,
+  defaultPageLoadTimeoutMs,
   logDir,
   runtimeDir,
   screenshotDir,
@@ -25,6 +26,7 @@ export type ServerConfig = {
   blockedUrlRules: string[];
   forceStopHotkey: string;
   disableForceStopHotkey: boolean;
+  pageLoadTimeoutMs: number;
 };
 
 const envPrefixes = ['BROWSER_USE_NATIVE_WINDOWS_', 'COMPUTER_USE_WINDOWS_'];
@@ -69,6 +71,11 @@ const envPort = (key: string) => {
   return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : defaultSsePort;
 };
 
+const envPositiveInteger = (key: string, fallback: number) => {
+  const raw = Number(envString(key));
+  return Number.isInteger(raw) && raw > 0 ? raw : fallback;
+};
+
 const splitArgs = (value: string) =>
   value.match(/(?:"[^"]+"|'[^']+'|\S+)/g)?.map((entry) =>
     entry.replace(/^["']|["']$/g, ''),
@@ -97,4 +104,8 @@ export const loadConfig = (): ServerConfig => ({
     .filter(Boolean),
   forceStopHotkey: envString('BROWSER_USE_NATIVE_WINDOWS_FORCE_STOP_HOTKEY') || defaultForceStopHotkey,
   disableForceStopHotkey: envBoolean('BROWSER_USE_NATIVE_WINDOWS_DISABLE_FORCE_STOP_HOTKEY'),
+  pageLoadTimeoutMs: envPositiveInteger(
+    'BROWSER_USE_NATIVE_WINDOWS_PAGE_LOAD_TIMEOUT_MS',
+    defaultPageLoadTimeoutMs,
+  ),
 });

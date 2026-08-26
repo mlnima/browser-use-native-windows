@@ -7,7 +7,7 @@ import { createObservation } from '../observation';
 import { closeRuntimeBrowser } from '../native/browserRuntime';
 import { refreshObservedTarget } from '../native/currentTarget';
 import { assertNativeActionSupported, runNativeAction } from '../native/input/actions';
-import type { NativeAction } from '../native/input/actionTypes';
+import { actionMayLoadPage, type NativeAction } from '../native/input/actionTypes';
 import { getNativeInputController } from '../native/input/controller';
 import { browserStatus } from '../tools/status';
 import { actionSchema } from '../tools/actionSchema';
@@ -73,9 +73,17 @@ export const registerTools = (
         const refreshed = await refreshObservedTarget(observation, state.browser);
         markObservationConsumed(state);
         consumed = true;
+        const pageLoadStartedAt = Date.now();
         const actionResult = await runNativeAction(nativeAction, refreshed);
         await sleep(actionSettleDelayMs);
-        const next = await createObservation({ state, config, inlineImage: true });
+        const next = await createObservation({
+          state,
+          config,
+          inlineImage: true,
+          previousObservation: observation,
+          pageLoadStartedAt,
+          waitForLoad: actionMayLoadPage(nativeAction),
+        });
         const details = { consumedObservationToken: observationToken, actionResult };
         return nativeAction.kind === 'fileDialogUpload' && next.observedTargetType === 'file-dialog'
           ? observationErrorResult('The file dialog remained open after fileDialogUpload.', next, details)
