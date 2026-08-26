@@ -3,6 +3,7 @@ import type { AccessibilityNode, Bounds, Point, WindowInfo } from '../types';
 import { runPowerShellJson } from './processExec';
 import { boundsHeight, boundsWidth } from './geometry';
 import { apiPrelude, escapePs } from './windowsApi';
+import { logError } from '../log';
 
 type RawAccessibilityNode = Record<string, unknown>;
 const roleOrder: Record<string, number> = { CheckBox: 1, RadioButton: 2, Edit: 3, ComboBox: 4, Button: 5, Slider: 6, Spinner: 7, Hyperlink: 8, MenuItem: 9, ListItem: 10 };
@@ -94,7 +95,8 @@ export const listAccessibilityNodes = async (window: WindowInfo, capture: Bounds
     const nodes = (Array.isArray(raw) ? raw : [raw]).filter((entry): entry is RawAccessibilityNode => !!entry && typeof entry === 'object')
       .map(toNode).sort(compareNode).slice(0, accessibilityMaxNodes);
     return nodes.map((node) => ({ ...node, bounds: scaleBounds(node.bounds, capture, size.width, size.height), center: scalePoint(node.center, capture, size.width, size.height) }));
-  } catch {
+  } catch (error) {
+    logError('Accessibility read failed.', error);
     return [];
   }
 };
