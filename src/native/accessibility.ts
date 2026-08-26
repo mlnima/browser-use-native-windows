@@ -78,7 +78,10 @@ $maxNodes = ${accessibilityMaxNodes}
         $state = $toggle.Current.ToggleState.ToString(); if ($state -eq "On") { $checked = $true }; if ($state -eq "Off") { $checked = $false }
       }
       $items.Add([PSCustomObject]@{
-        id=("uia-" + ($items.Count + 1));role=$role;name=[string]$current.Name;automationId=[string]$current.AutomationId;className=[string]$current.ClassName;checked=$checked;
+        id=("uia-" + ($items.Count + 1));role=$role;
+        name=[Regex]::Replace([string]$current.Name, "[\\x00-\\x1F]", " ");
+        automationId=[Regex]::Replace([string]$current.AutomationId, "[\\x00-\\x1F]", " ");
+        className=[Regex]::Replace([string]$current.ClassName, "[\\x00-\\x1F]", " ");checked=$checked;
         bounds=[PSCustomObject]@{left=[int][Math]::Round($clipLeft-$left);top=[int][Math]::Round($clipTop-$top);right=[int][Math]::Round($clipRight-$left);bottom=[int][Math]::Round($clipBottom-$top)};
         globalBounds=[PSCustomObject]@{left=[int][Math]::Round($clipLeft);top=[int][Math]::Round($clipTop);right=[int][Math]::Round($clipRight);bottom=[int][Math]::Round($clipBottom)};
         center=[PSCustomObject]@{x=[int]($cx-$left);y=[int]($cy-$top)};globalCenter=[PSCustomObject]@{x=$cx;y=$cy}
