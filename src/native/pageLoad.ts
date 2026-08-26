@@ -16,7 +16,7 @@ import {
 import type { WindowInfo } from '../types';
 import { sleep } from '../util/time';
 import { boundsHeight, boundsWidth } from './geometry';
-import { readCurrentBrowserUrl, urlsMatch } from './urlReader';
+import { urlsMatch } from './urlReader';
 import { captureWindowImage } from './windowsWindow';
 
 export type PageVisual = {
@@ -66,35 +66,34 @@ export const waitForPageLoad = async (params: {
   window: WindowInfo;
   baseline: PageVisual | null;
   previousUrl: string | null;
+  currentUrl: string | null;
   startedAt: number;
   timeoutMs: number;
   required: boolean;
 }) => {
   const deadline = params.startedAt + params.timeoutMs;
+  const detectionStartedAt = Date.now();
   let previous = params.baseline;
-  let currentUrl = await readCurrentBrowserUrl(params.window);
-  let loadDetected = params.required;
+  let loadDetected = params.required || !!params.previousUrl && !!params.currentUrl &&
+    !urlsMatch(params.currentUrl, params.previousUrl);
   let visualChanged = !params.baseline;
   let stableSamples = 0;
   while (Date.now() <= deadline) {
     const sample = await capturePageVisual(params.window);
-    currentUrl = await readCurrentBrowserUrl(params.window) || currentUrl;
     const changedFromBaseline = params.baseline
       ? differenceRatio(params.baseline, sample) >= pageLoadChangedPixelRatio
       : true;
-    const urlChanged = !!params.previousUrl && !!currentUrl && !urlsMatch(currentUrl, params.previousUrl);
     visualChanged ||= changedFromBaseline;
-    loadDetected ||= urlChanged || changedFromBaseline;
+    loadDetected ||= changedFromBaseline;
     stableSamples = previous && differenceRatio(previous, sample) <= pageLoadStablePixelRatio
       ? stableSamples + 1
       : 0;
     const elapsed = Date.now() - params.startedAt;
     const visuallyReady = visualChanged && sample.variance >= pageLoadMinimumVariance &&
       stableSamples >= pageLoadStableSampleCount && elapsed >= pageLoadMinimumWaitMs;
-    if (loadDetected && visuallyReady) return currentUrl;
-    if (!params.required && !loadDetected && elapsed >= pageLoadDetectionWindowMs) return currentUrl;
+    if (loadDetected && visuallyReady) return;
+    if (!params.required && !loadDetected && Date.now() - detectionStartedAt >= pageLoadDetectionWindowMs) return;
     previous = sample;
     await sleep(Math.min(pageLoadPollIntervalMs, Math.max(1, deadline - Date.now())));
   }
-  return currentUrl;
 };

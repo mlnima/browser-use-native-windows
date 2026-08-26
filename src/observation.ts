@@ -34,23 +34,24 @@ export const createObservation = async (params: {
         launchedNow: ensured.launchedNow,
       });
   const shouldWaitForLoad = !dialog && (url.targetUrlStatus === 'navigated' || params.waitForLoad === true);
-  const currentUrl = shouldWaitForLoad
-    ? await waitForPageLoad({
+  if (shouldWaitForLoad) {
+    await waitForPageLoad({
         window: ensured.window,
         baseline: navigationBaseline || actionBaseline,
         previousUrl: params.previousObservation?.currentUrl || null,
+        currentUrl: url.currentUrl,
         startedAt: url.loadStartedAt || params.pageLoadStartedAt || Date.now(),
         timeoutMs: params.config.pageLoadTimeoutMs,
         required: url.targetUrlStatus === 'navigated',
-      })
-    : url.currentUrl;
+      });
+  }
   if (!dialog && !await bringWindowToTop(ensured.window.handle)) throw new Error('Browser window could not be made foreground; screenshot capture aborted.');
   const current = await captureCurrentTarget(ensured.window, params.config.screenshotsDir);
   const observation: Observation = {
     sessionId: params.state.sessionId,
     observationToken: randomUUID(),
     observedTargetType: current.targetType,
-    currentUrl,
+    currentUrl: url.currentUrl,
     targetUrlStatus: url.targetUrlStatus,
     screenshot: current.screenshot.metadata,
     screenshotPath: current.screenshot.screenshotPath,
