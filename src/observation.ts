@@ -50,6 +50,7 @@ export const createObservation = async (params: {
   }
   if (!dialog && !await bringWindowToTop(ensured.window.handle)) throw new Error('Browser window could not be made foreground; screenshot capture aborted.');
   const current = await captureCurrentTarget(ensured.window, params.config.screenshotsDir);
+  currentUrl = dialog ? null : await readCurrentBrowserUrl(ensured.window) || currentUrl;
   const observation: Observation = {
     sessionId: params.state.sessionId,
     observationToken: randomUUID(),
