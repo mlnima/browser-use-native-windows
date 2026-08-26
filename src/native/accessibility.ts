@@ -89,7 +89,8 @@ $maxNodes = ${accessibilityMaxNodes}
     } catch {}
   }
 }
-@($items.ToArray()) | ConvertTo-Json -Depth 8 -Compress`;
+$json = @($items.ToArray()) | ConvertTo-Json -Depth 8 -Compress
+[Regex]::Replace([string]$json, "[\\x00-\\x1F]", " ")`;
 
 export const listAccessibilityNodes = async (window: WindowInfo, capture: Bounds, size: { width: number; height: number }) => {
   if (process.platform !== 'win32' || !window.handle) return [];
