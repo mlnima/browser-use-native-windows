@@ -8,6 +8,13 @@ import { logError } from '../log';
 type RawAccessibilityNode = Record<string, unknown>;
 const roleOrder: Record<string, number> = { Document: 1, CheckBox: 2, RadioButton: 3, Edit: 4, ComboBox: 5, Button: 6, Hyperlink: 6, Slider: 7, Spinner: 8, MenuItem: 9, ListItem: 10 };
 const numberValue = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+const textValue = (value: unknown) => {
+  try {
+    return Buffer.from(String(value || ''), 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+};
 const toBounds = (value: unknown): Bounds => {
   const root = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return { left: numberValue(root.left), top: numberValue(root.top), right: numberValue(root.right), bottom: numberValue(root.bottom) };
@@ -17,8 +24,8 @@ const toPoint = (value: unknown): Point => {
   return { x: numberValue(root.x), y: numberValue(root.y) };
 };
 const toNode = (raw: RawAccessibilityNode): AccessibilityNode => ({
-  id: String(raw.id || ''), role: String(raw.role || ''), name: String(raw.name || ''),
-  automationId: String(raw.automationId || ''), className: String(raw.className || ''),
+  id: String(raw.id || ''), role: String(raw.role || ''), name: textValue(raw.nameBase64),
+  automationId: textValue(raw.automationIdBase64), className: textValue(raw.classNameBase64),
   bounds: toBounds(raw.bounds), globalBounds: toBounds(raw.globalBounds),
   center: toPoint(raw.center), globalCenter: toPoint(raw.globalCenter),
   checked: raw.checked === true || raw.checked === false ? raw.checked : null,
@@ -79,9 +86,9 @@ $maxNodes = ${accessibilityScanMaxNodes}
       }
       $items.Add([PSCustomObject]@{
         id=("uia-" + ($items.Count + 1));role=$role;
-        name=[Regex]::Replace([string]$current.Name, "[\\x00-\\x1F]", " ");
-        automationId=[Regex]::Replace([string]$current.AutomationId, "[\\x00-\\x1F]", " ");
-        className=[Regex]::Replace([string]$current.ClassName, "[\\x00-\\x1F]", " ");checked=$checked;
+        nameBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$current.Name));
+        automationIdBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$current.AutomationId));
+        classNameBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$current.ClassName));checked=$checked;
         bounds=[PSCustomObject]@{left=[int][Math]::Round($clipLeft-$left);top=[int][Math]::Round($clipTop-$top);right=[int][Math]::Round($clipRight-$left);bottom=[int][Math]::Round($clipBottom-$top)};
         globalBounds=[PSCustomObject]@{left=[int][Math]::Round($clipLeft);top=[int][Math]::Round($clipTop);right=[int][Math]::Round($clipRight);bottom=[int][Math]::Round($clipBottom)};
         center=[PSCustomObject]@{x=[int]($cx-$left);y=[int]($cy-$top)};globalCenter=[PSCustomObject]@{x=$cx;y=$cy}
@@ -89,8 +96,7 @@ $maxNodes = ${accessibilityScanMaxNodes}
     } catch {}
   }
 }
-$json = @($items.ToArray()) | ConvertTo-Json -Depth 8 -Compress
-[Regex]::Replace([string]$json, "[\\x00-\\x1F]", " ")`;
+@($items.ToArray()) | ConvertTo-Json -Depth 8 -Compress`;
 
 export const listAccessibilityNodes = async (window: WindowInfo, capture: Bounds, size: { width: number; height: number }) => {
   if (process.platform !== 'win32' || !window.handle) return [];

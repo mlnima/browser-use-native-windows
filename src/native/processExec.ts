@@ -101,6 +101,21 @@ export const runPowerShell = async (script: string, timeoutMs = 10000) => {
 };
 
 export const runPowerShellJson = async <T>(script: string, fallback: T, timeoutMs = 10000) => {
-  const text = await runPowerShell(script, timeoutMs);
-  return text.length > 0 ? JSON.parse(text.replace(/[\u0000-\u001f]/g, ' ')) as T : fallback;
+  const wrapped = `$browserJsonOutput = @(& {
+${script}
+})
+$browserJsonText = if ($browserJsonOutput.Count -gt 0) { [string]$browserJsonOutput[$browserJsonOutput.Count - 1] } else { '' }
+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($browserJsonText))`;
+  const parse = async () => {
+    const output = await runPowerShell(wrapped, timeoutMs);
+    const encoded = output.split(/\r?\n/).filter((entry) => entry.length > 0).at(-1) || '';
+    const text = encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
+    return text.length > 0 ? JSON.parse(text) as T : fallback;
+  };
+  try {
+    return await parse();
+  } catch {
+    stopPowerShell();
+    return await parse();
+  }
 };
