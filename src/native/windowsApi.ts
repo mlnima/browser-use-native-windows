@@ -36,8 +36,7 @@ public static class NativeBrowserUseApi {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
   [DllImport("user32.dll", EntryPoint="GetPhysicalCursorPos")] static extern bool ReadPhysicalCursor(out POINT point);
-  [DllImport("user32.dll")] static extern bool SetPhysicalCursorPos(int x, int y);
-  [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
@@ -76,16 +75,67 @@ public static class NativeBrowserUseApi {
   public static uint ReadDpi(IntPtr hWnd) { uint dpi = GetDpiForWindow(hWnd); if (dpi == 0) throw new InvalidOperationException("Window DPI is unavailable."); return dpi; }
   public static int ReadMonitorScale(IntPtr monitor) { int scale; if (GetScaleFactorForMonitor(monitor, out scale) != 0 || scale <= 0) throw new InvalidOperationException("Monitor scale is unavailable."); return scale; }
   public static bool GetCursorPos(out POINT point) { if (!ReadPhysicalCursor(out point)) throw new InvalidOperationException("Physical cursor position is unavailable."); return true; }
-  public static void MoveCursor(int x, int y) {
-    bool moved = false;
-    try { moved = SetPhysicalCursorPos(x, y); } catch (EntryPointNotFoundException) {}
-    if (!moved) moved = SetCursorPos(x, y);
-    POINT point;
-    if (!moved || !ReadPhysicalCursor(out point) || point.X != x || point.Y != y) throw new InvalidOperationException("Native cursor movement failed.");
-  }
   public static void SendMouse(int x, int y, int data, uint flags) {
     INPUT input = new INPUT { type = 0, data = new INPUTUNION { mi = new MOUSEINPUT { dx = x, dy = y, mouseData = unchecked((uint)data), dwFlags = flags } } };
     if (SendInput(1, new INPUT[] { input }, Marshal.SizeOf(typeof(INPUT))) != 1) throw new InvalidOperationException("Native mouse input failed.");
+  }
+  static double Approach(double value, double target, double amount) {
+    if (value < target) return Math.Min(value + amount, target);
+    return Math.Max(value - amount, target);
+  }
+  static void RequireDesktopPoint(int x, int y) {
+    int left = GetSystemMetrics(76); int top = GetSystemMetrics(77);
+    int width = GetSystemMetrics(78); int height = GetSystemMetrics(79);
+    if (width <= 0 || height <= 0 || x < left || y < top || x >= (long)left + width || y >= (long)top + height) {
+      throw new InvalidOperationException("Native cursor target is outside the current virtual desktop.");
+    }
+  }
+  public static int MoveCursor(int targetX, int targetY) {
+    RequireDesktopPoint(targetX, targetY);
+    POINT point; GetCursorPos(out point);
+    double velocityX = 0; double velocityY = 0; double driftX = 0; double driftY = 0;
+    int unchanged = 0;
+    Random random = new Random(unchecked(Environment.TickCount * 397) ^ targetX ^ targetY);
+    for (int step = 0; step < 2400; step++) {
+      int dx = targetX - point.X; int dy = targetY - point.Y;
+      if (dx == 0 && dy == 0) return step;
+      double distance = Math.Sqrt((double)dx * dx + (double)dy * dy);
+      int moveX; int moveY;
+      if (distance <= 12) {
+        velocityX = 0; velocityY = 0;
+        int correction = Math.Min(3, 1 + unchanged / 5);
+        moveX = Math.Sign(dx) * Math.Min(Math.Abs(dx), correction);
+        moveY = Math.Sign(dy) * Math.Min(Math.Abs(dy), correction);
+      } else {
+        double speed = Math.Min(46, Math.Sqrt(distance * 7.5));
+        double drift = Math.Min(1, distance / 180);
+        driftX = driftX * 0.86 + (random.NextDouble() - 0.5) * 0.7 * drift;
+        driftY = driftY * 0.86 + (random.NextDouble() - 0.5) * 0.7 * drift;
+        double desiredX = dx / distance * speed + driftX;
+        double desiredY = dy / distance * speed + driftY;
+        velocityX = Approach(velocityX, desiredX, 3.4);
+        velocityY = Approach(velocityY, desiredY, 3.4);
+        moveX = Math.Sign(dx) * Math.Min(Math.Abs(dx), Math.Max(1, Math.Abs((int)Math.Round(velocityX))));
+        moveY = Math.Sign(dy) * Math.Min(Math.Abs(dy), Math.Max(1, Math.Abs((int)Math.Round(velocityY))));
+      }
+      POINT before = point;
+      SendMouse(moveX, moveY, 0, 0x2001);
+      System.Threading.Thread.Sleep(random.Next(5, 10));
+      GetCursorPos(out point);
+      unchanged = point.X == before.X && point.Y == before.Y ? unchanged + 1 : 0;
+      if (unchanged >= 30) throw new InvalidOperationException("Native cursor did not respond to relative movement.");
+    }
+    throw new InvalidOperationException("Native cursor did not reach the target within the movement limit.");
+  }
+  public static void ClickMouseAt(int x, int y, uint down, uint up, int holdMs) {
+    POINT point; GetCursorPos(out point);
+    if (point.X != x || point.Y != y) throw new InvalidOperationException("Native cursor moved before click.");
+    SendMouse(0, 0, 0, down);
+    try {
+      System.Threading.Thread.Sleep(Math.Max(1, holdMs));
+      GetCursorPos(out point);
+      if (point.X != x || point.Y != y) throw new InvalidOperationException("Native cursor moved while clicking.");
+    } finally { SendMouse(0, 0, 0, up); }
   }
   public static bool OwnsPoint(IntPtr target, int x, int y) { POINT point = new POINT { X = x, Y = y }; IntPtr hit = WindowFromPoint(point); return hit != IntPtr.Zero && GetAncestor(hit, 2) == target; }
   public static void SendScanCode(int code, bool up, bool extended) {

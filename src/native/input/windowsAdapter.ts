@@ -2,7 +2,7 @@ import type { NativeInputMouseButton, Point } from '../../types';
 import { runPowerShell } from '../processExec';
 import { apiPrelude, escapePs } from '../windowsApi';
 import { windowsKeyEntry, windowsNativeKeyCodes, type NativeWindowsKeyEntry } from './keyMap';
-import type { NativeInputAdapter } from './types';
+import type { NativeInputAdapter, NativeMouseMovement } from './types';
 
 const mouseFlags: Record<NativeInputMouseButton, { down: number; up: number }> = {
   left: { down: 0x0002, up: 0x0004 },
@@ -14,10 +14,10 @@ let lastDriverError: string | null = null;
 
 const keyHoldMs = () => Math.round(12 + Math.random() * 24);
 
-const runNativeScript = async (script: string) => {
+const runNativeScript = async (script: string, timeoutMs?: number) => {
   try {
     const result = await runPowerShell(`${apiPrelude()}
-${script}`);
+${script}`, timeoutMs);
     lastDriverError = null;
     return result;
   } catch (error) {
@@ -49,11 +49,20 @@ const readCursorPosition = async (): Promise<Point | null> =>
 [NativeBrowserUseApi]::GetCursorPos([ref]$point) | Out-Null
 [PSCustomObject]@{x=[int]$point.X;y=[int]$point.Y} | ConvertTo-Json -Compress`) || 'null') as Point | null;
 
+const moveMouseTo = async (x: number, y: number): Promise<NativeMouseMovement> =>
+  JSON.parse(await runNativeScript(`$before = New-Object POINT
+[NativeBrowserUseApi]::GetCursorPos([ref]$before) | Out-Null
+$steps = [NativeBrowserUseApi]::MoveCursor(${Math.round(x)}, ${Math.round(y)})
+$after = New-Object POINT
+[NativeBrowserUseApi]::GetCursorPos([ref]$after) | Out-Null
+[PSCustomObject]@{steps=[int]$steps;start=[PSCustomObject]@{x=[int]$before.X;y=[int]$before.Y};end=[PSCustomObject]@{x=[int]$after.X;y=[int]$after.Y}} | ConvertTo-Json -Depth 3 -Compress`, 30000)) as NativeMouseMovement;
+
 export const createWindowsInputAdapter = (): NativeInputAdapter => ({
   platform: 'windows',
-  moveMouseRelative: async (dx, dy) => await sendMouse(0x0001, dx, dy),
-  moveMouseAbsolute: async (x, y) => {
-    await runNativeScript(`[NativeBrowserUseApi]::MoveCursor(${Math.round(x)}, ${Math.round(y)})`);
+  moveMouseTo,
+  clickMouseAt: async (button, point, holdMs) => {
+    const flags = mouseFlags[button];
+    await runNativeScript(`[NativeBrowserUseApi]::ClickMouseAt(${Math.round(point.x)}, ${Math.round(point.y)}, ${flags.down}, ${flags.up}, ${Math.max(1, Math.round(holdMs))})`);
   },
   mouseDown: async (button) => await sendMouse(mouseFlags[button].down),
   mouseUp: async (button) => await sendMouse(mouseFlags[button].up),
@@ -75,8 +84,7 @@ export const createWindowsInputAdapter = (): NativeInputAdapter => ({
 export const getWindowsInputDriverStatus = async () => {
   try {
     await runNativeScript(`$point = New-Object POINT
-[NativeBrowserUseApi]::GetCursorPos([ref]$point) | Out-Null
-[NativeBrowserUseApi]::MoveCursor([int]$point.X, [int]$point.Y)`);
+[NativeBrowserUseApi]::GetCursorPos([ref]$point) | Out-Null`);
     return { available: true, error: null };
   } catch (error) {
     return { available: false, error: error instanceof Error ? error.message : String(error) || lastDriverError };

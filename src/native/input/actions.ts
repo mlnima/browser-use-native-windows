@@ -66,16 +66,16 @@ const clickAt = async (
   delayMs?: number,
 ) => {
   await requireOwnedTarget(observation, point);
-  await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
+  await controller.moveMouseTo(point.x, point.y);
   await sleep(delayMs ?? clickDelayMs);
   await requireCursorAtPoint(controller, point, observation);
   await requireOwnedTarget(observation, point);
-  await controller.clickMouse(button);
+  await controller.clickMouse(button, point);
   if (doubleClick === true) {
     await sleep(doubleClickDelayMs);
     await requireCursorAtPoint(controller, point, observation);
     await requireOwnedTarget(observation, point);
-    await controller.clickMouse(button);
+    await controller.clickMouse(button, point);
   }
   return { cursorVerified: true };
 };
@@ -160,7 +160,7 @@ const scrollAction = async (controller: NativeInputController, action: Extract<N
   if (typeof action.x === 'number' && typeof action.y === 'number') {
     const point = localPoint(observation, { x: action.x, y: action.y });
     await requireOwnedTarget(observation, point);
-    await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
+    await controller.moveMouseTo(point.x, point.y);
     await requireCursorAtPoint(controller, point, observation);
   }
   const cursor = await requireCursorInside(controller, observation);
@@ -174,10 +174,10 @@ const dragPointAction = async (controller: NativeInputController, action: Extrac
   const end = localPoint(observation, { x: action.endX, y: action.endY });
   await requireOwnedTarget(observation, start);
   await requireOwnedTarget(observation, end);
-  await controller.moveMouseTo(start.x, start.y, observation.screenshot.virtualBounds);
+  await controller.moveMouseTo(start.x, start.y);
   await requireCursorAtPoint(controller, start, observation);
   await requireOwnedTarget(observation, start);
-  await controller.dragMouseTo(end.x, end.y, observation.screenshot.virtualBounds, normalizeButton(action.button));
+  await controller.dragMouseTo(end.x, end.y, normalizeButton(action.button));
   await requireCursorAtPoint(controller, end, observation);
   await requireOwnedTarget(observation, end);
   return { cursorVerified: true };
@@ -197,7 +197,7 @@ export const runNativeAction = async (action: NativeAction, observation: Observa
   if (action.kind === 'movePoint') {
     const point = localPoint(observation, action);
     await requireOwnedTarget(observation, point);
-    await controller.moveMouseTo(point.x, point.y, observation.screenshot.virtualBounds);
+    await controller.moveMouseTo(point.x, point.y);
     await requireCursorAtPoint(controller, point, observation);
     await requireOwnedTarget(observation, point);
     return { cursorVerified: true };

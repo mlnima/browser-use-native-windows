@@ -1,5 +1,4 @@
-import type { Bounds, NativeInputMouseButton } from '../../types';
-import { mouseSpeedMultiplier, mouseTargetAttempts } from '../../defaults';
+import type { NativeInputMouseButton } from '../../types';
 import { sleep } from '../../util/time';
 import { logError } from '../../log';
 import { createWindowsInputAdapter, getWindowsInputDriverStatus } from './windowsAdapter';
@@ -15,9 +14,6 @@ const humanKeyPauseMs = () =>
   randomIntegerInRange(8, 25);
 
 const mouseButtons: NativeInputMouseButton[] = ['left', 'right', 'middle'];
-
-const cursorAtTarget = (cursor: { x: number; y: number }, target: { x: number; y: number }) =>
-  cursor.x === target.x && cursor.y === target.y;
 
 let controller: NativeInputController | null = null;
 
@@ -75,22 +71,11 @@ export const getNativeInputController = () => {
     return cursor;
   };
 
-  const moveMouseToTarget = async (x: number, y: number, desktopBounds: Bounds) => {
+  const moveMouseToTarget = async (x: number, y: number) => {
     const target = { x: Math.round(x), y: Math.round(y) };
-    if (target.x < desktopBounds.left || target.x >= desktopBounds.right || target.y < desktopBounds.top || target.y >= desktopBounds.bottom) {
-      throw new Error('Native cursor target is outside the current virtual desktop.');
-    }
-    const initial = await readCursorPosition();
-    let totalSteps = 0;
-    for (let attempt = 0; attempt < mouseTargetAttempts; attempt += 1) {
-      const cursor = await readCursorPosition();
-      if (cursorAtTarget(cursor, target)) return { steps: totalSteps, movedDx: target.x - initial.x, movedDy: target.y - initial.y };
-      await adapter.moveMouseAbsolute(target.x, target.y, desktopBounds);
-      totalSteps += 1;
-      await sleep(Math.max(1, Math.round(12 / mouseSpeedMultiplier)));
-    }
-    const cursor = await readCursorPosition();
-    const message = `Native cursor failed to reach target ${target.x},${target.y}; current position is ${cursor.x},${cursor.y}.`;
+    const movement = await adapter.moveMouseTo(target.x, target.y);
+    if (movement.end.x === target.x && movement.end.y === target.y) return movement;
+    const message = `Native cursor failed to reach target ${target.x},${target.y}; current position is ${movement.end.x},${movement.end.y}.`;
     logError(message);
     throw new Error(message);
   };
@@ -101,25 +86,20 @@ export const getNativeInputController = () => {
       await releaseMouseButtons();
       await adapter.scroll(delta);
     },
-    moveMouseTo: async (x, y, desktopBounds) => {
+    moveMouseTo: async (x, y) => {
       await releaseMouseButtons();
-      return await moveMouseToTarget(x, y, desktopBounds);
+      return await moveMouseToTarget(x, y);
     },
-    clickMouse: async (button) => {
-      try {
-        await adapter.mouseDown(button);
-        pressedButtons.add(button);
-        await sleep(randomNumberInRange(12, 28));
-      } finally {
-        await releaseMouseButton(button);
-      }
+    clickMouse: async (button, point) => {
+      await releaseMouseButtons();
+      await adapter.clickMouseAt(button, point, randomNumberInRange(12, 28));
     },
-    dragMouseTo: async (x, y, desktopBounds, button) => {
+    dragMouseTo: async (x, y, button) => {
       try {
         await adapter.mouseDown(button);
         pressedButtons.add(button);
         await sleep(randomNumberInRange(15, 35));
-        const result = await moveMouseToTarget(x, y, desktopBounds);
+        const result = await moveMouseToTarget(x, y);
         await sleep(randomNumberInRange(8, 20));
         return result;
       } finally {
