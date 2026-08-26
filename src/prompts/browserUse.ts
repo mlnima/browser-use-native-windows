@@ -9,7 +9,7 @@ Use targetUrl on browser_observe only when the user task names a page to open. I
 export const browserUseNativeWindowsNativeInputPrompt = `
 Use native mouse and keyboard actions only. Do not use DOM selectors, browser scripting, Chrome DevTools, Playwright, page evaluation, extensions, or CDP concepts.
 
-For every target represented in accessibilityNodes, use clickNode with that node id. clickNode moves the physical cursor to the returned node center, verifies the cursor, and clicks. Use clickPoint only when no accessibility node represents the visible target; never estimate a point for a named accessibility control. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
+For every target represented in accessibilityNodes, use clickNode with that node id. clickNode moves the physical cursor to the returned node center, verifies the cursor, and clicks. Use clickPoint only when no accessibility node represents the visible target and keep it inside screenshot.contentBounds; never estimate a point for a named accessibility control or browser chrome. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
 `;
 
 export const browserObserveToolDescription = `

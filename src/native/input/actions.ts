@@ -15,6 +15,8 @@ const clampNumber = (value: number, minimum: number, maximum: number) =>
 const normalizeButton = (button?: NativeInputMouseButton): NativeInputMouseButton =>
   button === 'right' || button === 'middle' ? button : 'left';
 
+const interactiveRoles = new Set(['CheckBox', 'RadioButton', 'Edit', 'ComboBox', 'Button', 'Slider', 'Spinner', 'Hyperlink', 'MenuItem', 'ListItem']);
+
 const localPoint = (observation: Observation, point: Point) => {
   const maxX = Math.max(1, observation.screenshot.width);
   const maxY = Math.max(1, observation.screenshot.height);
@@ -116,7 +118,7 @@ const nodeArea = (node: Observation['accessibilityNodes'][number]) =>
 
 const nodeAtPoint = (observation: Observation, point: Point) =>
   observation.accessibilityNodes
-    .filter((node) => pointInsideBounds(point, node.bounds))
+    .filter((node) => interactiveRoles.has(node.role) && pointInsideBounds(point, node.bounds))
     .sort((left, right) => nodeArea(left) - nodeArea(right))[0] || null;
 
 export const assertNativeActionSupported = (action: NativeAction, observation: Observation) => {
@@ -131,6 +133,10 @@ export const assertNativeActionSupported = (action: NativeAction, observation: O
           : [];
   keys.filter(Boolean).forEach((key) => windowsKeyEntry(key));
   const point = pointClickAction(action);
+  if (point && observation.observedTargetType === 'browser-window' && observation.screenshot.contentBounds &&
+    !pointInsideBounds(point, observation.screenshot.contentBounds)) {
+    throw new Error(`${action.kind} is outside webpage content. Use clickNode for browser controls.`);
+  }
   const node = point ? nodeAtPoint(observation, point) : null;
   if (node) {
     throw new Error(`${action.kind} overlaps accessibility node ${node.id} (${node.role} "${node.name}"). Use clickNode with the intended node id.`);
@@ -178,6 +184,7 @@ const modifierClickPointAction = async (controller: NativeInputController, actio
 const clickNodeAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'clickNode' }>, observation: Observation) => {
   const node = observation.accessibilityNodes.find((entry) => entry.id === action.nodeId);
   if (!node) throw new Error(`Accessibility node is unavailable: ${action.nodeId}`);
+  if (!interactiveRoles.has(node.role)) throw new Error(`Accessibility node is not interactive: ${action.nodeId}`);
   const point = localPoint(observation, node.center);
   const click = async () => await clickAt(
     controller,

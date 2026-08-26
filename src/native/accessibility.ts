@@ -6,7 +6,7 @@ import { apiPrelude, escapePs } from './windowsApi';
 import { logError } from '../log';
 
 type RawAccessibilityNode = Record<string, unknown>;
-const roleOrder: Record<string, number> = { CheckBox: 1, RadioButton: 2, Edit: 3, ComboBox: 4, Button: 5, Slider: 6, Spinner: 7, Hyperlink: 8, MenuItem: 9, ListItem: 10 };
+const roleOrder: Record<string, number> = { Document: 1, CheckBox: 2, RadioButton: 3, Edit: 4, ComboBox: 5, Button: 6, Slider: 7, Spinner: 8, Hyperlink: 9, MenuItem: 10, ListItem: 11 };
 const numberValue = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 const toBounds = (value: unknown): Bounds => {
   const root = value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -42,8 +42,8 @@ ${apiPrelude()}
 Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes; Add-Type -AssemblyName WindowsBase
 $h = [IntPtr]::new([Int64]'${escapePs(window.handle)}')
 $left = ${Math.round(capture.left)}; $top = ${Math.round(capture.top)}; $right = ${Math.round(capture.right)}; $bottom = ${Math.round(capture.bottom)}
-  $roles = @("CheckBox","RadioButton","Edit","ComboBox","Button","Slider","Spinner","Hyperlink","MenuItem","ListItem")
-  $controlTypes = @([System.Windows.Automation.ControlType]::CheckBox,[System.Windows.Automation.ControlType]::RadioButton,[System.Windows.Automation.ControlType]::Edit,[System.Windows.Automation.ControlType]::ComboBox,[System.Windows.Automation.ControlType]::Button,[System.Windows.Automation.ControlType]::Slider,[System.Windows.Automation.ControlType]::Spinner,[System.Windows.Automation.ControlType]::Hyperlink,[System.Windows.Automation.ControlType]::MenuItem,[System.Windows.Automation.ControlType]::ListItem)
+  $roles = @("Document","CheckBox","RadioButton","Edit","ComboBox","Button","Slider","Spinner","Hyperlink","MenuItem","ListItem")
+  $controlTypes = @([System.Windows.Automation.ControlType]::Document,[System.Windows.Automation.ControlType]::CheckBox,[System.Windows.Automation.ControlType]::RadioButton,[System.Windows.Automation.ControlType]::Edit,[System.Windows.Automation.ControlType]::ComboBox,[System.Windows.Automation.ControlType]::Button,[System.Windows.Automation.ControlType]::Slider,[System.Windows.Automation.ControlType]::Spinner,[System.Windows.Automation.ControlType]::Hyperlink,[System.Windows.Automation.ControlType]::MenuItem,[System.Windows.Automation.ControlType]::ListItem)
 $maxNodes = ${accessibilityMaxNodes}
   $root = [System.Windows.Automation.AutomationElement]::FromHandle($h); $items = New-Object System.Collections.Generic.List[object]
   if ($root -ne $null) {

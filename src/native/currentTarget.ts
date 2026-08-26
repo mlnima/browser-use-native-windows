@@ -39,6 +39,8 @@ export const captureCurrentTarget = async (browser: WindowInfo, screenshotsDir: 
     const accessibilityNodes = before.targetType === 'file-dialog'
       ? []
       : await listAccessibilityNodes(before.target, screenshot.metadata.globalBounds, screenshot.metadata);
+    const document = accessibilityNodes.find((node) => node.role === 'Document');
+    if (before.targetType === 'browser-window' && document) screenshot.metadata.contentBounds = document.bounds;
     const after = await readTarget(before.browser);
     const foreground = await getForegroundWindow();
     if (sameCapture(before, after) && foreground?.handle === before.target.handle) return { ...before, screenshot, accessibilityNodes };
