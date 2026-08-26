@@ -102,5 +102,5 @@ export const runPowerShell = async (script: string, timeoutMs = 10000) => {
 
 export const runPowerShellJson = async <T>(script: string, fallback: T, timeoutMs = 10000) => {
   const text = await runPowerShell(script, timeoutMs);
-  return text.length > 0 ? JSON.parse(text) as T : fallback;
+  return text.length > 0 ? JSON.parse(text.replace(/[\u0000-\u001f]/g, ' ')) as T : fallback;
 };
