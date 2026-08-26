@@ -6,7 +6,7 @@ import { apiPrelude, escapePs } from './windowsApi';
 import { logError } from '../log';
 
 type RawAccessibilityNode = Record<string, unknown>;
-const roleOrder: Record<string, number> = { Document: 1, CheckBox: 2, RadioButton: 3, Edit: 4, ComboBox: 5, Button: 6, Slider: 7, Spinner: 8, Hyperlink: 9, MenuItem: 10, ListItem: 11 };
+const roleOrder: Record<string, number> = { Document: 1, CheckBox: 2, RadioButton: 3, Edit: 4, ComboBox: 5, Button: 6, Hyperlink: 6, Slider: 7, Spinner: 8, MenuItem: 9, ListItem: 10 };
 const numberValue = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 const toBounds = (value: unknown): Bounds => {
   const root = value && typeof value === 'object' ? value as Record<string, unknown> : {};

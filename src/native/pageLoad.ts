@@ -67,6 +67,7 @@ export const waitForPageLoad = async (params: {
   baseline: PageVisual | null;
   previousUrl: string | null;
   currentUrl: string | null;
+  readCurrentUrl: () => Promise<string | null>;
   startedAt: number;
   timeoutMs: number;
   required: boolean;
@@ -74,11 +75,15 @@ export const waitForPageLoad = async (params: {
   const deadline = params.startedAt + params.timeoutMs;
   const detectionStartedAt = Date.now();
   let previous = params.baseline;
-  let loadDetected = params.required || !!params.previousUrl && !!params.currentUrl &&
-    !urlsMatch(params.currentUrl, params.previousUrl);
+  let currentUrl = params.currentUrl;
+  let liveUrl = currentUrl;
+  let loadDetected = params.required || !!params.previousUrl && !!currentUrl &&
+    !urlsMatch(currentUrl, params.previousUrl);
   let visualChanged = !params.baseline;
   let stableSamples = 0;
   while (Date.now() <= deadline) {
+    liveUrl = await params.readCurrentUrl();
+    currentUrl = liveUrl || currentUrl;
     const sample = await capturePageVisual(params.window);
     const changedFromBaseline = params.baseline
       ? differenceRatio(params.baseline, sample) >= pageLoadChangedPixelRatio
@@ -91,9 +96,11 @@ export const waitForPageLoad = async (params: {
     const elapsed = Date.now() - params.startedAt;
     const visuallyReady = visualChanged && sample.variance >= pageLoadMinimumVariance &&
       stableSamples >= pageLoadStableSampleCount && elapsed >= pageLoadMinimumWaitMs;
-    if (loadDetected && visuallyReady) return;
-    if (!params.required && !loadDetected && Date.now() - detectionStartedAt >= pageLoadDetectionWindowMs) return;
+    const urlReady = !params.previousUrl || !!liveUrl;
+    if (loadDetected && visuallyReady && urlReady) return currentUrl;
+    if (!params.required && !loadDetected && Date.now() - detectionStartedAt >= pageLoadDetectionWindowMs) return currentUrl;
     previous = sample;
     await sleep(Math.min(pageLoadPollIntervalMs, Math.max(1, deadline - Date.now())));
   }
+  return currentUrl;
 };

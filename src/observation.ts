@@ -7,6 +7,7 @@ import { captureCurrentTarget } from './native/currentTarget';
 import { handleTargetUrl } from './native/targetUrl';
 import { capturePageVisual, readPageVisual, waitForPageLoad } from './native/pageLoad';
 import { bringWindowToTop, foregroundBrowserOwnedFileDialog } from './native/windowsWindow';
+import { readCurrentBrowserUrl } from './native/urlReader';
 
 export const createObservation = async (params: {
   state: RuntimeState;
@@ -34,16 +35,18 @@ export const createObservation = async (params: {
         launchedNow: ensured.launchedNow,
       });
   const shouldWaitForLoad = !dialog && (url.targetUrlStatus === 'navigated' || params.waitForLoad === true);
+  let currentUrl = url.currentUrl;
   if (shouldWaitForLoad) {
-    await waitForPageLoad({
-        window: ensured.window,
-        baseline: navigationBaseline || actionBaseline,
-        previousUrl: params.previousObservation?.currentUrl || null,
-        currentUrl: url.currentUrl,
-        startedAt: url.loadStartedAt || params.pageLoadStartedAt || Date.now(),
-        timeoutMs: params.config.pageLoadTimeoutMs,
-        required: url.targetUrlStatus === 'navigated',
-      });
+    currentUrl = await waitForPageLoad({
+      window: ensured.window,
+      baseline: navigationBaseline || actionBaseline,
+      previousUrl: params.previousObservation?.currentUrl || null,
+      currentUrl,
+      readCurrentUrl: async () => await readCurrentBrowserUrl(ensured.window),
+      startedAt: url.loadStartedAt || params.pageLoadStartedAt || Date.now(),
+      timeoutMs: params.config.pageLoadTimeoutMs,
+      required: url.targetUrlStatus === 'navigated',
+    });
   }
   if (!dialog && !await bringWindowToTop(ensured.window.handle)) throw new Error('Browser window could not be made foreground; screenshot capture aborted.');
   const current = await captureCurrentTarget(ensured.window, params.config.screenshotsDir);
@@ -51,7 +54,7 @@ export const createObservation = async (params: {
     sessionId: params.state.sessionId,
     observationToken: randomUUID(),
     observedTargetType: current.targetType,
-    currentUrl: url.currentUrl,
+    currentUrl,
     targetUrlStatus: url.targetUrlStatus,
     screenshot: current.screenshot.metadata,
     screenshotPath: current.screenshot.screenshotPath,
