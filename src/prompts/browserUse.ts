@@ -10,6 +10,8 @@ export const browserUseNativeWindowsNativeInputPrompt = `
 Use native mouse and keyboard actions only. Do not use DOM selectors, browser scripting, Chrome DevTools, Playwright, page evaluation, extensions, or CDP concepts.
 
 For every target represented in accessibilityNodes, use clickNode with that node id. clickNode moves the physical cursor to the returned node center, verifies the cursor, and clicks. Use clickPoint only when no accessibility node represents the visible target and keep it inside screenshot.contentBounds; never estimate a point for a named accessibility control or browser chrome. For text and key actions, use browser_act with typeText, press, pressCombo, keyDown, or keyUp. When the exact upload path is known, use fileDialogUpload(path,x,y) on the visible file chooser to open and complete the dialog in one action. If the dialog is already observed, use fileDialogUpload(path) without x/y.
+
+For scrolling, use scroll(x,y,direction,steps?) with x/y inside the intended scrollable element, not on its scrollbar. The action moves the physical cursor to that point, verifies its exact position, and sends native mouse-wheel input. Never click or drag a scrollbar to scroll. Confirm from the returned screenshot that the intended element moved; otherwise retry at another point inside that element or report the blocker.
 `;
 
 export const browserObserveToolDescription = `
@@ -21,7 +23,7 @@ Run one native action against a matching fresh observation token. The result inc
 `;
 
 export const browserActionDescription = `
-Native action kinds and fields: clickNode(nodeId,modifiers?,button?,doubleClick?), clickPoint(x,y,button?,doubleClick?), modifierClickPoint(x,y,modifiers), contextClickPoint(x,y), middleClickPoint(x,y), movePoint(x,y), dragPoint(startX,startY,endX,endY,button?), typeText(text,submit?,slowly?), fileDialogUpload(path,x?,y?), press(key), pressCombo(keys), keyDown(key), keyUp(key), scroll(x?,y?,deltaY?).
+Native action kinds and fields: clickNode(nodeId,modifiers?,button?,doubleClick?), clickPoint(x,y,button?,doubleClick?), modifierClickPoint(x,y,modifiers), contextClickPoint(x,y), middleClickPoint(x,y), movePoint(x,y), dragPoint(startX,startY,endX,endY,button?), typeText(text,submit?,slowly?), fileDialogUpload(path,x?,y?), press(key), pressCombo(keys), keyDown(key), keyUp(key), scroll(x,y,direction,steps?).
 `;
 
 export const browserKeyDescription = `

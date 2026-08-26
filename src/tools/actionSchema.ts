@@ -32,6 +32,7 @@ const requiredFields: Record<string, string[]> = {
   pressCombo: ['keys'],
   keyDown: ['key'],
   keyUp: ['key'],
+  scroll: ['x', 'y', 'direction'],
 };
 
 export const actionSchema = z.object({
@@ -53,8 +54,8 @@ export const actionSchema = z.object({
   key: z.string().optional().describe(browserKeyDescription),
   keys: z.array(z.string()).optional().describe(browserKeyDescription),
   delayMs: z.number().optional(),
-  delta: z.number().optional(),
-  deltaY: z.number().optional(),
+  direction: z.enum(['up', 'down']).optional(),
+  steps: z.number().optional(),
 }).superRefine((action, context) => {
   const record = action as Record<string, unknown>;
   for (const field of requiredFields[action.kind] || []) {

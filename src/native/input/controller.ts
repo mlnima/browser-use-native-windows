@@ -82,9 +82,9 @@ export const getNativeInputController = () => {
 
   controller = {
     ...adapter,
-    scrollMouse: async (delta) => {
+    scrollMouse: async (point, delta) => {
       await releaseMouseButtons();
-      await adapter.scroll(delta);
+      await adapter.scroll(point, delta);
     },
     moveMouseTo: async (x, y) => {
       await releaseMouseButtons();

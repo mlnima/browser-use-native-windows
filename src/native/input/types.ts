@@ -12,7 +12,7 @@ export type NativeInputAdapter = {
   clickMouseAt: (button: NativeInputMouseButton, point: Point, holdMs: number) => Promise<void>;
   mouseDown: (button: NativeInputMouseButton) => Promise<void>;
   mouseUp: (button: NativeInputMouseButton) => Promise<void>;
-  scroll: (delta: number) => Promise<void>;
+  scroll: (point: Point, delta: number) => Promise<void>;
   keyDown: (key: string) => Promise<void>;
   keyUp: (key: string) => Promise<void>;
   pressKey: (key: string) => Promise<void>;
@@ -22,7 +22,7 @@ export type NativeInputAdapter = {
 };
 
 export type NativeInputController = NativeInputAdapter & {
-  scrollMouse: (delta: number) => Promise<void>;
+  scrollMouse: (point: Point, delta: number) => Promise<void>;
   moveMouseTo: (x: number, y: number) => Promise<NativeMouseMovement>;
   clickMouse: (button: NativeInputMouseButton, point: Point) => Promise<void>;
   dragMouseTo: (x: number, y: number, button: NativeInputMouseButton) => Promise<NativeMouseMovement>;

@@ -14,7 +14,7 @@ export type NativeAction =
   | { kind: 'pressCombo'; keys: string[]; delayMs?: number }
   | { kind: 'keyDown'; key: string }
   | { kind: 'keyUp'; key: string }
-  | { kind: 'scroll'; x?: number; y?: number; delta?: number; deltaY?: number };
+  | { kind: 'scroll'; x: number; y: number; direction: 'up' | 'down'; steps?: number };
 
 export const actionMayLoadPage = (action: NativeAction) =>
   action.kind === 'clickNode' ||

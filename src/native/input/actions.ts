@@ -1,5 +1,5 @@
 import type { NativeInputMouseButton, Observation, Point } from '../../types';
-import { clickDelayMs, doubleClickDelayMs, scrollDefault, scrollMax, scrollMin } from '../../defaults';
+import { clickDelayMs, doubleClickDelayMs, scrollDefaultSteps, scrollMaxSteps, wheelDelta } from '../../defaults';
 import { boundsHeight, boundsWidth, localToGlobalPoint, pointInsideBounds } from '../geometry';
 import { bringWindowToTop, foregroundBrowserOwnedFileDialog, getForegroundWindow, getForegroundWindowHandle, pointBelongsToWindow, refreshWindow } from '../windowsWindow';
 import { sleep } from '../../util/time';
@@ -8,9 +8,6 @@ import { getNativeInputController } from './controller';
 import { normalizeWindowsKey, windowsKeyEntry } from './keyMap';
 import type { NativeAction } from './actionTypes';
 import type { NativeInputController } from './types';
-
-const clampNumber = (value: number, minimum: number, maximum: number) =>
-  Math.min(Math.max(value, minimum), maximum);
 
 const normalizeButton = (button?: NativeInputMouseButton): NativeInputMouseButton =>
   button === 'right' || button === 'middle' ? button : 'left';
@@ -33,14 +30,6 @@ const requireCursorAtPoint = async (controller: NativeInputController, point: Po
     logError(message);
     throw new Error(message);
   }
-};
-
-const requireCursorInside = async (controller: NativeInputController, observation: Observation) => {
-  const cursor = await controller.getCursorPosition();
-  if (!cursor || !pointInsideBounds(cursor, observation.screenshot.globalBounds)) {
-    throw new Error('Native cursor is outside the observed target; mouse input aborted.');
-  }
-  return cursor;
 };
 
 const requireOwnedTarget = async (observation: Observation, point?: Point) => {
@@ -137,6 +126,11 @@ export const assertNativeActionSupported = (action: NativeAction, observation: O
     !pointInsideBounds(point, observation.screenshot.contentBounds)) {
     throw new Error(`${action.kind} is outside webpage content. Use clickNode for browser controls.`);
   }
+  const scrollPoint = action.kind === 'scroll' ? { x: action.x, y: action.y } : null;
+  if (scrollPoint && observation.observedTargetType === 'browser-window' && observation.screenshot.contentBounds &&
+    !pointInsideBounds(scrollPoint, observation.screenshot.contentBounds)) {
+    throw new Error('scroll is outside webpage content.');
+  }
   const node = point ? nodeAtPoint(observation, point) : null;
   if (node) {
     throw new Error(`${action.kind} overlaps accessibility node ${node.id} (${node.role} "${node.name}"). Use clickNode with the intended node id.`);
@@ -201,16 +195,15 @@ const clickNodeAction = async (controller: NativeInputController, action: Extrac
 };
 
 const scrollAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'scroll' }>, observation: Observation) => {
-  if (typeof action.x === 'number' && typeof action.y === 'number') {
-    const point = localPoint(observation, { x: action.x, y: action.y });
-    await requireOwnedTarget(observation, point);
-    await controller.moveMouseTo(point.x, point.y);
-    await requireCursorAtPoint(controller, point, observation);
-  }
-  const cursor = await requireCursorInside(controller, observation);
-  await requireOwnedTarget(observation, cursor);
-  await controller.scrollMouse(clampNumber(action.deltaY ?? action.delta ?? scrollDefault, scrollMin, scrollMax));
-  return { cursorVerified: typeof action.x === 'number' && typeof action.y === 'number' };
+  const point = localPoint(observation, action);
+  const steps = Math.min(Math.max(Math.round(action.steps ?? scrollDefaultSteps), 1), scrollMaxSteps);
+  const delta = steps * wheelDelta * (action.direction === 'down' ? -1 : 1);
+  await requireOwnedTarget(observation, point);
+  await controller.moveMouseTo(point.x, point.y);
+  await requireCursorAtPoint(controller, point, observation);
+  await requireOwnedTarget(observation, point);
+  await controller.scrollMouse(point, delta);
+  return { cursorVerified: true, direction: action.direction, steps, target: { x: action.x, y: action.y } };
 };
 
 const dragPointAction = async (controller: NativeInputController, action: Extract<NativeAction, { kind: 'dragPoint' }>, observation: Observation) => {

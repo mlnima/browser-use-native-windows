@@ -137,6 +137,11 @@ public static class NativeBrowserUseApi {
       if (point.X != x || point.Y != y) throw new InvalidOperationException("Native cursor moved while clicking.");
     } finally { SendMouse(0, 0, 0, up); }
   }
+  public static void ScrollMouseAt(int x, int y, int delta) {
+    POINT point; GetCursorPos(out point);
+    if (point.X != x || point.Y != y) throw new InvalidOperationException("Native cursor moved before wheel scroll.");
+    SendMouse(0, 0, delta, 0x0800);
+  }
   public static bool OwnsPoint(IntPtr target, int x, int y) { POINT point = new POINT { X = x, Y = y }; IntPtr hit = WindowFromPoint(point); return hit != IntPtr.Zero && GetAncestor(hit, 2) == target; }
   public static void SendScanCode(int code, bool up, bool extended) {
     uint flags = 0x0008 | (up ? 0x0002u : 0u) | (extended ? 0x0001u : 0u);

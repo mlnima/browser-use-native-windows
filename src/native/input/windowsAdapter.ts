@@ -66,7 +66,9 @@ export const createWindowsInputAdapter = (): NativeInputAdapter => ({
   },
   mouseDown: async (button) => await sendMouse(mouseFlags[button].down),
   mouseUp: async (button) => await sendMouse(mouseFlags[button].up),
-  scroll: async (delta) => await sendMouse(0x0800, 0, 0, delta),
+  scroll: async (point, delta) => {
+    await runNativeScript(`[NativeBrowserUseApi]::ScrollMouseAt(${Math.round(point.x)}, ${Math.round(point.y)}, ${Math.round(delta)})`);
+  },
   keyDown: async (key) => { await runNativeScript(keyCall(windowsKeyEntry(key), true)); },
   keyUp: async (key) => { await runNativeScript(keyCall(windowsKeyEntry(key), false)); },
   pressKey: async (key) => await pressEntries([], windowsKeyEntry(key)),
