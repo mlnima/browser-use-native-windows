@@ -46,12 +46,23 @@ $left = ${Math.round(capture.left)}; $top = ${Math.round(capture.top)}; $right =
 $maxNodes = ${accessibilityMaxNodes}
   $root = [System.Windows.Automation.AutomationElement]::FromHandle($h); $items = New-Object System.Collections.Generic.List[object]
   if ($root -ne $null) {
-    $conditions = @($controlTypes | ForEach-Object { [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $_) })
-    $condition = [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]$conditions)
-    $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $condition)
+    $roleConditions = @($controlTypes | ForEach-Object { [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $_) })
+    $rolesCondition = [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]$roleConditions)
+    $visibleCondition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsOffscreenProperty, $false)
+    $condition = [System.Windows.Automation.AndCondition]::new([System.Windows.Automation.Condition[]]@($rolesCondition, $visibleCondition))
+    $cache = [System.Windows.Automation.CacheRequest]::new()
+    $cache.TreeScope = [System.Windows.Automation.TreeScope]::Element
+    $cache.Add([System.Windows.Automation.AutomationElement]::ControlTypeProperty)
+    $cache.Add([System.Windows.Automation.AutomationElement]::NameProperty)
+    $cache.Add([System.Windows.Automation.AutomationElement]::AutomationIdProperty)
+    $cache.Add([System.Windows.Automation.AutomationElement]::ClassNameProperty)
+    $cache.Add([System.Windows.Automation.AutomationElement]::BoundingRectangleProperty)
+    $cache.Add([System.Windows.Automation.AutomationElement]::IsOffscreenProperty)
+    $scope = $cache.Activate()
+    try { $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $condition) } finally { $scope.Dispose() }
     for ($index = 0; $index -lt $elements.Count -and $items.Count -lt $maxNodes; $index++) {
     try {
-      $element = $elements.Item($index); $current = $element.Current
+      $element = $elements.Item($index); $current = $element.Cached
       if ($current.IsOffscreen) { continue }
       $role = $current.ControlType.ProgrammaticName.Replace("ControlType.", "")
       if (-not $roles.Contains($role)) { continue }
@@ -61,12 +72,6 @@ $maxNodes = ${accessibilityMaxNodes}
       $clipRight = [Math]::Min($rect.Right, $right); $clipBottom = [Math]::Min($rect.Bottom, $bottom)
       if (($clipRight - $clipLeft -lt 1) -or ($clipBottom - $clipTop -lt 1)) { continue }
       $cx = [int][Math]::Round(($clipLeft + $clipRight) / 2); $cy = [int][Math]::Round(($clipTop + $clipBottom) / 2)
-      try {
-        $clickable = $element.GetClickablePoint()
-        if ($clickable.X -ge $clipLeft -and $clickable.X -lt $clipRight -and $clickable.Y -ge $clipTop -and $clickable.Y -lt $clipBottom) {
-          $cx = [int][Math]::Round($clickable.X); $cy = [int][Math]::Round($clickable.Y)
-        }
-      } catch {}
       $toggle = $null; $checked = $null
       if ($element.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$toggle)) {
         $state = $toggle.Current.ToggleState.ToString(); if ($state -eq "On") { $checked = $true }; if ($state -eq "Off") { $checked = $false }
